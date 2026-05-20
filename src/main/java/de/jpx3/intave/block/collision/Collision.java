@@ -134,7 +134,7 @@ public final class Collision {
             }
           }
 
-          boolean blockOutsideBorder = !blockInsideBorder(world, x, z);
+          boolean blockOutsideBorder = !blockInsideBorder(user, world, x, z);
           if (blockOutsideBorder && !playerOutsideBorder(user, environment)) {
             BlockShape borderShape = BlockShapes.cubeAt(x, y, z);
             if (borderShape.intersectsWith(playerBox)) {
@@ -310,7 +310,7 @@ public final class Collision {
                     blockShape, CollisionOrigin.INTERSECTION_CHECK
                   );
                 }
-                boolean blockOutsideBorder = !blockInsideBorder(world, x, z);
+                boolean blockOutsideBorder = !blockInsideBorder(user, world, x, z);
                 if (blockOutsideBorder && !movementData.outsideBorder) {
                   if (resolvedBoundingBoxes == null) {
                     resolvedBoundingBoxes = new ArrayList<>();
@@ -343,9 +343,9 @@ public final class Collision {
     return resolvedBoundingBoxes;
   }
 
-  public static boolean blockInsideBorder(World world, double positionX, double positionZ) {
-    Location center = WorldBorders.centerOfWorldBorderIn(world);
-    double radius = WorldBorders.sizeOfWorldBorderIn(world) / 2.0;
+  public static boolean blockInsideBorder(User user, World world, double positionX, double positionZ) {
+    Location center = WorldBorders.centerOfWorldBorderIn(user, world);
+    double radius = WorldBorders.sizeOfWorldBorderIn(user, world) / 2.0;
     double minX = center.getX() - radius - 1;
     double minZ = center.getZ() - radius - 1;
     double maxX = center.getX() + radius;
@@ -359,8 +359,8 @@ public final class Collision {
     World world = user.player().getWorld();
     double positionX = environment.verifiedPositionX();
     double positionZ = environment.verifiedPositionZ();
-    Location center = WorldBorders.centerOfWorldBorderIn(world);
-    double radius = WorldBorders.sizeOfWorldBorderIn(world) / 2.0;
+    Location center = WorldBorders.centerOfWorldBorderIn(user, world);
+    double radius = WorldBorders.sizeOfWorldBorderIn(user, world) / 2.0;
     double minX = center.getX() - radius;
     double minZ = center.getZ() - radius;
     double maxX = center.getX() + radius;

@@ -621,7 +621,7 @@ public final class Physics extends Check {
         boolean altered = BlockTypeAccess.hasTranslation(user, BlockTypeAccess.typeAccess(block));
 
         String colliderName;
-        if (!Collision.blockInsideBorder(player.getWorld(), blockPositionX, blockPositionZ)) {
+        if (!Collision.blockInsideBorder(user, player.getWorld(), blockPositionX, blockPositionZ)) {
           colliderName = "world border";
         } else {
           String prefix = (currentlyInOverride ? "emulated " : "") + (altered ? "altered " : "");
