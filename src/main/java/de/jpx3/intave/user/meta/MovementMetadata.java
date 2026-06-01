@@ -21,7 +21,6 @@ import de.jpx3.intave.block.tick.ShulkerBox;
 import de.jpx3.intave.block.type.BlockTypeAccess;
 import de.jpx3.intave.check.movement.physics.*;
 import de.jpx3.intave.check.movement.physics.environment.SimulationEnvironment;
-import de.jpx3.intave.check.movement.physics.environment.UnmodifiableSimulationEnvironmentView;
 import de.jpx3.intave.check.world.interaction.BlockTrustChain;
 import de.jpx3.intave.cleanup.GarbageCollector;
 import de.jpx3.intave.entity.datawatcher.DataWatcherAccess;
@@ -1006,17 +1005,12 @@ public final class MovementMetadata implements SimulationEnvironment {
     AbilityMetadata abilities = user.meta().abilities();
     WrappedAttribute movementSpeed = abilities.findAttribute("generic.movementSpeed");
 
-//    player.sendMessage(ChatColor.GOLD + "Sprint-toggle to: " + sprinting);
-
     List<WrappedAttributeModifier> movementSpeedModifiers = abilities.modifiersOf(movementSpeed);
     if (sprinting) {
-      //
       if (!movementSpeedModifiers.contains(SPRINTING_MODIFIER)) {
-//        player.sendMessage(ChatColor.RED + "Added Sprinting Modifier");
         movementSpeedModifiers.add(SPRINTING_MODIFIER);
       }
     } else {
-//      player.sendMessage(ChatColor.RED + "Removed Sprinting Modifier");
       movementSpeedModifiers.remove(SPRINTING_MODIFIER);
     }
   }

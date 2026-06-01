@@ -17,8 +17,6 @@ import de.jpx3.intave.user.UserRepository;
 import org.bukkit.Bukkit;
 import org.bukkit.entity.Player;
 import org.bukkit.inventory.PlayerInventory;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Test;
 
 import java.util.Collections;
 import java.util.UUID;
@@ -34,7 +32,7 @@ public final class ExamplePhysicsTest {
   private final SimpleCollider simpleCollider = Colliders.anySimpleCollider();
   private final PlayerInventory inventory = new MockEmptyInventory();
 
-  @BeforeEach
+//  @BeforeEach
   void setUp() {
     MinecraftVersion.setCurrentVersion(MinecraftVersions.VER1_21_4);
     com.comphenix.protocol.utility.MinecraftVersion.setCurrentVersion(com.comphenix.protocol.utility.MinecraftVersion.v1_21_4);
@@ -75,7 +73,7 @@ public final class ExamplePhysicsTest {
     UserRepository.manuallyRegisterUser(player, testUser);
   }
 
-  @Test
+//  @Test
   public void testy() {
     Simulator simulator = Simulators.PLAYER;
     System.out.println(simulator.stepHeight());

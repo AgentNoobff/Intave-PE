@@ -3,11 +3,11 @@ package de.jpx3.intave.check.combat;
 import com.comphenix.protocol.PacketType;
 import com.comphenix.protocol.events.PacketContainer;
 import com.comphenix.protocol.events.PacketEvent;
-import de.jpx3.intave.adapter.MinecraftVersion;
 import com.comphenix.protocol.wrappers.EnumWrappers.EntityUseAction;
 import de.jpx3.intave.IntaveLogger;
 import de.jpx3.intave.IntavePlugin;
 import de.jpx3.intave.access.player.trust.TrustFactor;
+import de.jpx3.intave.adapter.MinecraftVersion;
 import de.jpx3.intave.annotate.Nullable;
 import de.jpx3.intave.check.CheckStatistics;
 import de.jpx3.intave.check.CheckViolationLevelDecrementer;
@@ -62,16 +62,14 @@ import static de.jpx3.intave.module.violation.Violation.ViolationFlags.DONT_PROC
 
 public final class AttackRaytrace extends MetaCheck<AttackRaytrace.AttackRaytraceMeta> {
   private static final char[] VOCALS = "aeiou".toCharArray();
-  private final IntavePlugin plugin;
-  private final CheckViolationLevelDecrementer hitboxDecrementer, reachDecrementer, timeoutDecrementer;
+	private final CheckViolationLevelDecrementer hitboxDecrementer, reachDecrementer, timeoutDecrementer;
   private final boolean zeroNetworkTolerance;
   private final double VL_DECREMENT_PER_ATTACK = 0.125;
   private static final int MAX_ALLOWED_PENDING_ATTACKS = 10;
 
   public AttackRaytrace(IntavePlugin plugin) {
     super("AttackRaytrace", "attackraytrace", AttackRaytraceMeta.class);
-    this.plugin = plugin;
-    this.hitboxDecrementer = new CheckViolationLevelDecrementer(this, "applicable-thresholds.hitbox", VL_DECREMENT_PER_ATTACK * 0.5);
+	  this.hitboxDecrementer = new CheckViolationLevelDecrementer(this, "applicable-thresholds.hitbox", VL_DECREMENT_PER_ATTACK * 0.5);
     this.reachDecrementer = new CheckViolationLevelDecrementer(this, "applicable-thresholds.reach", VL_DECREMENT_PER_ATTACK * 2);
     this.timeoutDecrementer = new CheckViolationLevelDecrementer(this, "applicable-thresholds.timeout", VL_DECREMENT_PER_ATTACK * 1.5);
     this.zeroNetworkTolerance = plugin.getConfig().getBoolean("checks.timer.low-tolerance", false) && plugin.getConfig().getBoolean("checks.timer.block-stutter-hits", false);
