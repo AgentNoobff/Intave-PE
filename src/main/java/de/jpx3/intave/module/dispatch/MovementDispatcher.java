@@ -1072,7 +1072,7 @@ public final class MovementDispatcher extends Module {
           motion.setMotionY(Math.min(0, motion.motionY()));
           motion.setMotionZ(motion.motionZ() / pendingVelocityPackets);
           reader.setMotion(motion);
-        } else {
+        } else if (!event.isReadOnly()){
           cancellable.setCancelled(true);
           return;
         }
