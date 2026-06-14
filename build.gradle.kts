@@ -12,7 +12,7 @@ plugins {
 
 val gitTag by lazy {
   providers.exec {
-    commandLine("git", "describe", "--tags")
+    commandLine("git", "describe", "--tags", "--abbrev=0")
   }.standardOutput.asText.get().trim()
 }
 
@@ -24,7 +24,7 @@ val gitCommitHash by lazy {
 
 val simpleName = "Intave"
 group = "de.jpx3"
-version = "$gitTag+$gitCommitHash"
+version = "$gitTag-$gitCommitHash"
 description = "Automated cheat detection and prevention"
 
 /*

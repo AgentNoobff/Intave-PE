@@ -751,7 +751,7 @@ public final class IntavePlugin extends JavaPlugin {
 
   public static String versionTag() {
     String version = fullVersion();
-    int lastPlusIndex = version.lastIndexOf('+');
+    int lastPlusIndex = version.lastIndexOf('-');
     if (lastPlusIndex != -1) {
       return version.substring(0, lastPlusIndex);
     }
@@ -760,7 +760,7 @@ public final class IntavePlugin extends JavaPlugin {
 
   public static String commitHash() {
     String version = fullVersion();
-    int lastPlusIndex = version.lastIndexOf('+');
+    int lastPlusIndex = version.lastIndexOf('-');
     if (lastPlusIndex != -1 && lastPlusIndex < version.length() - 1) {
       return version.substring(lastPlusIndex + 1);
     }
