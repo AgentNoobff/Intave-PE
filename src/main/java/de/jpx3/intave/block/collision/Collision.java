@@ -51,16 +51,14 @@ public final class Collision {
     return Collectors.collectingAndThen(Collectors.counting(), predicate::test);
   }
 
-  @Deprecated
-  public static BlockShape shape(Player player, BoundingBox playerBoundingBox) {
-    return shape(player, UserRepository.userOf(player).meta().movement(), playerBoundingBox);
-  }
-
   public static BlockShape shape(
-    Player player, SimulationEnvironment environment, BoundingBox box
+    User user, SimulationEnvironment environment, BoundingBox box
   ) {
-    int collisionLimit = scaleAdjustedCollisionLimitOf(UserRepository.userOf(player));
-    return collectCollisionShapes(player, environment, box, collisionLimit, SHAPE_COMPILATION, BlockShapes::emptyShape);
+    int collisionLimit = scaleAdjustedCollisionLimitOf(user);
+    return collectCollisionShapes(
+      user, environment.unmodifiable(), box, collisionLimit,
+      SHAPE_COMPILATION, BlockShapes::emptyShape
+    );
   }
 
   @Deprecated
@@ -68,21 +66,32 @@ public final class Collision {
     return present(player, UserRepository.userOf(player).meta().movement(), box);
   }
 
-  public static boolean present(Player player, SimulationEnvironment environment, BoundingBox playerBox) {
-    return collectCollisionShapes(player, environment, playerBox, 1, EXISTS_ANY_SHAPE, () -> false);
+  @Deprecated
+  public static boolean present(Player player, SimulationEnvironment environment, BoundingBox box) {
+    return present(UserRepository.userOf(player), environment, box);
+  }
+
+  public static boolean present(User user, SimulationEnvironment environment, BoundingBox box) {
+    return collectCollisionShapes(user, environment.unmodifiable(), box, 1, EXISTS_ANY_SHAPE, () -> false);
   }
 
   @Deprecated
   public static boolean nonePresent(Player player, BoundingBox playerBox) {
-    return nonePresent(player, UserRepository.userOf(player).meta().movement(), playerBox);
+    User user = UserRepository.userOf(player);
+    return nonePresent(user, user.meta().movement(), playerBox);
   }
 
+  @Deprecated
   public static boolean nonePresent(Player player, SimulationEnvironment environment, BoundingBox playerBox) {
-    return collectCollisionShapes(player, environment, playerBox, 1, EXISTS_NO_SHAPE, () -> true);
+    return nonePresent(UserRepository.userOf(player), environment, playerBox);
+  }
+
+  public static boolean nonePresent(User user, SimulationEnvironment environment, BoundingBox playerBox) {
+    return collectCollisionShapes(user, environment.unmodifiable(), playerBox, 1, EXISTS_NO_SHAPE, () -> true);
   }
 
   public static <C, R> R collectCollisionShapes(
-    Player player,
+    User user,
     SimulationEnvironment environment,
     BoundingBox playerBox,
     int collisionLimit,
@@ -100,8 +109,7 @@ public final class Collision {
     int minZ = floor(playerBox.minZ);
     int maxZ = floor(playerBox.maxZ);
     int ystart = Math.max(minY - 1, WorldHeight.LOWER_WORLD_LIMIT);
-    User user = UserRepository.userOf(player);
-    World world = player.getWorld();
+    World world = user.player().getWorld();
     BlockCache stateAccess = user.blockCache();
     int collisionLimitAdjusted = scaleAdjustedCollisionLimitOf(user);
     int collisionChecksRemaining = collisionLimitAdjusted;
@@ -357,8 +365,8 @@ public final class Collision {
     User user, SimulationEnvironment environment
   ) {
     World world = user.player().getWorld();
-    double positionX = environment.verifiedPositionX();
-    double positionZ = environment.verifiedPositionZ();
+    double positionX = environment.verifiedLastPositionX();
+    double positionZ = environment.verifiedLastPositionZ();
     Location center = WorldBorders.centerOfWorldBorderIn(user, world);
     double radius = WorldBorders.sizeOfWorldBorderIn(user, world) / 2.0;
     double minX = center.getX() - radius;

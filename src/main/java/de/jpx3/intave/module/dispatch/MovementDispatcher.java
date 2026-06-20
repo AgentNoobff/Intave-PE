@@ -252,7 +252,6 @@ public final class MovementDispatcher extends Module {
       movement.sneaking = false;
       movement.setSprinting(false);
       if (protocol.protocolVersion() >= VER_1_16) {
-        movement.sprintReset();
         user.refreshSprintState();
       }
       Synchronizer.synchronize(inventory::releaseItemNextTick);
@@ -320,7 +319,6 @@ public final class MovementDispatcher extends Module {
     boolean hasRotation = reader.hasRotation();
 
     if (movementData.isInVehicle() && !vehicleMove && hasRotation && !hasMovement) {
-      movementData.applyGroundInformationToPacket(packet);
       movementData.rotationYaw = packet.getFloat().read(0);
       movementData.rotationPitch = packet.getFloat().read(1);
       logging.logSystemMessage(user, () -> "MOVEMENT IGNORED: Vehicle rotation only");
@@ -363,15 +361,15 @@ public final class MovementDispatcher extends Module {
     }
 
     // see MultiPlayerGameMode#useItem
-    if (protocol.cavesAndCliffsUpdate() && !movementData.awaitTeleport
+    if (protocol.useItemMovementPacket() && !movementData.awaitTeleport
       && packet.getType() == PacketType.Play.Client.POSITION_LOOK
     ) {
       double positionX = reader.positionX();
       double positionY = reader.positionY();
       double positionZ = reader.positionZ();
-      double motionX = positionX - movementData.verifiedPositionX;
-      double motionY = positionY - movementData.verifiedPositionY;
-      double motionZ = positionZ - movementData.verifiedPositionZ;
+      double motionX = positionX - movementData.verifiedLastPositionX;
+      double motionY = positionY - movementData.verifiedLastPositionY;
+      double motionZ = positionZ - movementData.verifiedLastPositionZ;
       double distance = MathHelper.hypot3d(motionX, motionY, motionZ);
 
       if (distance < 0.00001) {
@@ -389,7 +387,7 @@ public final class MovementDispatcher extends Module {
         if (!MinecraftVersions.VER1_9_0.atOrAbove()) {
           event.setCancelled(true);
         } else {
-          reader.setPosition(movementData.verifiedPosition());
+          reader.setPosition(movementData.verifiedLastPosition());
         }
         reader.release();
         return;
@@ -407,6 +405,7 @@ public final class MovementDispatcher extends Module {
       reader.yaw(), reader.pitch(),
       hasMovement, hasRotation
     );
+    inventoryData.updateSlotSwitch();
 
     if (hasMovement) {
       logging.logSystemMessage(user, () -> "MOTION LOGIC: Received motion: " + movementData.motion());
@@ -416,7 +415,7 @@ public final class MovementDispatcher extends Module {
 
     if (IntaveControl.DEBUG_COLLISION_BOXES || user.receives(MessageChannel.DEBUG_COLLISIONS)) {
       BoundingBox box = movementData.boundingBox().grow(0.1);
-      BlockShape shape = Collision.shape(player, movementData, box);
+      BlockShape shape = Collision.shape(user, movementData, box);
       List<BoundingBox> boundingBoxes = shape.elementaryBoxes();
       boundingBoxes = BlockShapes.mergeBoxes(boundingBoxes).elementaryBoxes();
       drawDebugBoxes(user, boundingBoxes);
@@ -435,7 +434,7 @@ public final class MovementDispatcher extends Module {
     }
 
     double distance = MathHelper.distanceOf(
-      movementData.verifiedPositionX, movementData.verifiedPositionY, movementData.verifiedPositionZ,
+      movementData.verifiedLastPositionX, movementData.verifiedLastPositionY, movementData.verifiedLastPositionZ,
       movementData.positionX, movementData.positionY, movementData.positionZ
     );
 
@@ -453,7 +452,7 @@ public final class MovementDispatcher extends Module {
       String details = "moved " + MathHelper.formatDouble(distance, 2) + " blocks";
       Map<String, String> granulars = new HashMap<>();
       granulars.put("DIST", MathHelper.formatDouble(distance, 2));
-      granulars.put("FROM", movementData.verifiedPositionX + " " + movementData.verifiedPositionY + " " + movementData.verifiedPositionZ);
+      granulars.put("FROM", movementData.verifiedLastPositionX + " " + movementData.verifiedLastPositionY + " " + movementData.verifiedLastPositionZ);
       granulars.put("FROM_ORIGIN", movementData.verifiedPositionOrigin);
       granulars.put("TO", movementData.positionX + " " + movementData.positionY + " " + movementData.positionZ);
       granulars.put("MOTION", movementData.baseMotionX + " " + movementData.baseMotionY + " " + movementData.baseMotionZ);
@@ -538,9 +537,7 @@ public final class MovementDispatcher extends Module {
 
       // I have neither the time nor the energy for a proper fix
       if (movementData.motion().length() > 0.5 && movementData.ticksPast(VEHICLE_DETACHMENT) < 2) {
-        movementData.setBaseMotionX(0);
-        movementData.setBaseMotionY(0);
-        movementData.setBaseMotionZ(0);
+        movementData.setBaseMotion(Motion.newEmpty());
         movementData.physicsResetMotionX = true;
         movementData.physicsResetMotionZ = true;
       }
@@ -692,10 +689,9 @@ public final class MovementDispatcher extends Module {
     }
 
     if (movement.isInVehicle() && !vehicleMove && hasRotation && !hasMovement) {
-      movement.applyGroundInformationToPacket(packet);
-      movement.verifiedPositionX = movement.positionX;
-      movement.verifiedPositionY = movement.positionY;
-      movement.verifiedPositionZ = movement.positionZ;
+      movement.verifiedLastPositionX = movement.positionX;
+      movement.verifiedLastPositionY = movement.positionY;
+      movement.verifiedLastPositionZ = movement.positionZ;
       movement.verifiedPositionOrigin = "Vehicle rotation only, blind copy from current";
       return;
     }
@@ -855,9 +851,9 @@ public final class MovementDispatcher extends Module {
 
     if (!event.isCancelled() && !movement.isTeleportConfirmationPacket && !movement.dropPostTickMotionProcessing) {
       movement.lastOnGround = movement.onGround;
-      movement.verifiedPositionX = movement.positionX;
-      movement.verifiedPositionY = movement.positionY;
-      movement.verifiedPositionZ = movement.positionZ;
+      movement.verifiedLastPositionX = movement.positionX;
+      movement.verifiedLastPositionY = movement.positionY;
+      movement.verifiedLastPositionZ = movement.positionZ;
       movement.verifiedPositionOrigin = "Verification push";
 //      System.out.println("Verified position: " + movement.positionX + " " + movement.positionY + " " + movement.positionZ);
     }
@@ -1275,7 +1271,6 @@ public final class MovementDispatcher extends Module {
     MetadataBundle meta = user.meta();
     MovementMetadata movementData = meta.movement();
     ProtocolMetadata protocol = meta.protocol();
-    PunishmentMetadata punishmentData = meta.punishment();
     switch (reader.playerAction()) {
       case START_SPRINTING:
         if (allowSprinting(user)) {
@@ -1307,7 +1302,7 @@ public final class MovementDispatcher extends Module {
             if (IntaveControl.DEBUG_ELYTRA) {
               user.player().sendMessage(ChatColor.GREEN + "Activated elytra flying (START_FALL_FLYING)");
             }
-            movementData.setPose(Pose.FALL_FLYING);
+            movementData.manualPoseSet(Pose.FALL_FLYING);
           }
         }
         break;

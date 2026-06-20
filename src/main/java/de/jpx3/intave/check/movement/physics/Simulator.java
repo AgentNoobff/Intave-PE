@@ -10,7 +10,7 @@ import de.jpx3.intave.user.User;
 import de.jpx3.intave.user.meta.MovementMetadata;
 
 public abstract class Simulator {
-  public void simulate(
+  public void simulateBetween(
     User user, MovementMetadata metadata,
     MovementConfiguration config
   ) {
@@ -24,16 +24,16 @@ public abstract class Simulator {
     Simulation simulation = simulateTick(
       user, motion.copy(), metadata.unmodifiable(), config
     );
-    motion = simulation.motion().copy();
-    Position newPosition = metadata.verifiedPosition().add(motion);
-    metadata.updateMovement(newPosition, Rotation.zero());
     metadata.assumeOccurred(simulation);
+    motion = simulation.motion().copy();
+    Position newPosition = metadata.verifiedLastPosition().add(motion);
+    metadata.updateMovement(newPosition, Rotation.zero());
     simulateAfterTick(
       user, metadata, metadata.position(), motion
     );
     metadata.setBaseMotion(motion);
     metadata.lastOnGround = metadata.onGround;
-    metadata.setVerifiedPosition(
+    metadata.setVerifiedLastPosition(
       metadata.position(), "AUTOACCEPT"
     );
   }

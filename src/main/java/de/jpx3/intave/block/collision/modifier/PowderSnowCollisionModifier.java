@@ -21,7 +21,7 @@ public final class PowderSnowCollisionModifier extends CollisionModifier {
     if (movement.artificialFallDistance > 2.5) {
       return FALLING_SHAPE.contextualized(posX, posY, posZ);
     }
-    if (canWalkOnPowderSnow(user.player()) && movement.verifiedPositionY > (double)posY + 1 - 9.999999747378752E-6 && !movement.isSneaking()) {
+    if (canWalkOnPowderSnow(user.player()) && movement.verifiedLastPositionY > (double)posY + 1 - 9.999999747378752E-6 && !movement.isSneaking()) {
       return POWDER_SNOW_FROM_ABOVE.contextualized(posX, posY, posZ);
     } else {
       return BlockShapes.emptyShape();

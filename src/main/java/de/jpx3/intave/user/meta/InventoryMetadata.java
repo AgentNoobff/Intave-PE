@@ -191,6 +191,25 @@ public final class InventoryMetadata {
     releaseItemType = heldItemType();
   }
 
+  public void updateSlotSwitch() {
+    if (slotSwitchData != null) {
+      int slot = slotSwitchData.slot();
+      ItemStack item = slotSwitchData.item();
+
+      boolean primaryItemUsable = ItemProperties.canItemBeUsed(player, item);
+      boolean offhandItemUsage = ItemProperties.canItemBeUsed(player, offhandItem());
+      boolean handActive = (primaryItemUsable || offhandItemUsage) && handActive();
+      if (handActive) {
+        activateHand();
+      } else {
+       deactivateHand();
+      }
+      setHeldItemSlot(slot);
+      pastHotBarSlotChange = 0;
+      slotSwitchData = null;
+    }
+  }
+
   public void setHeldItemSlot(int slot) {
     this.handSlot = slot;
   }

@@ -35,7 +35,11 @@ public final class UnmodifiableSimulationEnvironmentView implements SimulationEn
 	}
 
 	@Override
-	public void updateMovement(double newPositionX, double newPositionY, double newPositionZ, float newRotationYaw, float newRotationPitch, boolean hasMovement, boolean hasRotation) {
+	public void updateMovement(
+		double newPositionX, double newPositionY, double newPositionZ,
+		float newRotationYaw, float newRotationPitch,
+		boolean hasMovement, boolean hasRotation
+	) {
 		throw new UnsupportedOperationException("This environment view is unmodifiable");
 	}
 
@@ -60,27 +64,27 @@ public final class UnmodifiableSimulationEnvironmentView implements SimulationEn
 	}
 
 	@Override
-	public Position verifiedPosition() {
-		return delegate.verifiedPosition();
+	public Position verifiedLastPosition() {
+		return delegate.verifiedLastPosition();
 	}
 
 	@Override
-	public double verifiedPositionX() {
-		return delegate.verifiedPositionX();
+	public double verifiedLastPositionX() {
+		return delegate.verifiedLastPositionX();
 	}
 
 	@Override
-	public double verifiedPositionY() {
-		return delegate.verifiedPositionY();
+	public double verifiedLastPositionY() {
+		return delegate.verifiedLastPositionY();
 	}
 
 	@Override
-	public double verifiedPositionZ() {
-		return delegate.verifiedPositionZ();
+	public double verifiedLastPositionZ() {
+		return delegate.verifiedLastPositionZ();
 	}
 
 	@Override
-	public void setVerifiedPosition(Position position, String reason) {
+	public void setVerifiedLastPosition(Position position, String reason) {
 		throw new UnsupportedOperationException("This environment view is unmodifiable");
 	}
 
@@ -102,6 +106,11 @@ public final class UnmodifiableSimulationEnvironmentView implements SimulationEn
 	@Override
 	public double lastPositionZ() {
 		return delegate.lastPositionZ();
+	}
+
+	@Override
+	public void setLastPosition(double x, double y, double z) {
+		throw new UnsupportedOperationException("This environment view is unmodifiable");
 	}
 
 	@Override
@@ -160,17 +169,7 @@ public final class UnmodifiableSimulationEnvironmentView implements SimulationEn
 	}
 
 	@Override
-	public void setBaseMotionX(double baseMotionX) {
-		throw new UnsupportedOperationException("Cannot modify unmodifiable view");
-	}
-
-	@Override
-	public void setBaseMotionY(double baseMotionY) {
-		throw new UnsupportedOperationException("Cannot modify unmodifiable view");
-	}
-
-	@Override
-	public void setBaseMotionZ(double baseMotionZ) {
+	public void setBaseMotion(double baseMotionX, double baseMotionY, double baseMotionZ) {
 		throw new UnsupportedOperationException("Cannot modify unmodifiable view");
 	}
 
@@ -237,6 +236,11 @@ public final class UnmodifiableSimulationEnvironmentView implements SimulationEn
 	@Override
 	public double jumpMotion() {
 		return delegate.jumpMotion();
+	}
+
+	@Override
+	public void setJumpMotion(double jumpMotion) {
+		throw new UnsupportedOperationException("Cannot modify unmodifiable view");
 	}
 
 	@Override

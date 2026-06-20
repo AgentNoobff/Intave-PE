@@ -31,9 +31,8 @@ public final class AbilityMetadata {
   private AbilityTracker.GameMode pendingGameMode = NOT_SET;
 
   private float flySpeed = 0.05f;
-  private float walkSpeed = 0.1f;
 
-  private final Map<String, Attribute> attributes = new ConcurrentHashMap<>();
+	private final Map<String, Attribute> attributes = new ConcurrentHashMap<>();
   private final Map<String, List<AttributeModifier>> attributeModifiers = new ConcurrentHashMap<>();
 
   public float unsynchronizedHealth;
@@ -53,8 +52,7 @@ public final class AbilityMetadata {
       this.foodLevel = player.getFoodLevel();
       setupDefaultGameMode(player.getGameMode());
 
-      this.walkSpeed = player.getWalkSpeed() / 2.0f;
-      this.flySpeed = player.getFlySpeed() / 2.0f;
+	    this.flySpeed = player.getFlySpeed() / 2.0f;
 
       setupAttributes();
     } else {

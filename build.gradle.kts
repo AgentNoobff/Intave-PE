@@ -269,6 +269,7 @@ val paperRunConfigs = mapOf(
   Pair("1.21.7", 21),
   Pair("1.21.11", 25),
   Pair("26.1.2", 25),
+  Pair("26.2", 25),
 )
 
 val foliaRunConfigs = mapOf(

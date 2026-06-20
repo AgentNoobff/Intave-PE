@@ -26,9 +26,9 @@ final class ElytraSimulator extends BaseSimulator {
     float rotationPitch = environment.rotationPitch();
     Vector lookVector = environment.lookVector();
 
-    double positionX = environment.verifiedPositionX();
-    double positionY = environment.verifiedPositionY();
-    double positionZ = environment.verifiedPositionZ();
+    double positionX = environment.verifiedLastPositionX();
+    double positionY = environment.verifiedLastPositionY();
+    double positionZ = environment.verifiedLastPositionZ();
 
     float pitchRad = rotationPitch * 0.017453292F;
     double lookVectorX = lookVector.getX();
@@ -80,9 +80,9 @@ final class ElytraSimulator extends BaseSimulator {
     float rotationPitch = environment.rotationPitch();
     Vector lookVector = environment.lookVector();
 
-    double positionX = environment.verifiedPositionX();
-    double positionY = environment.verifiedPositionY();
-    double positionZ = environment.verifiedPositionZ();
+    double positionX = environment.verifiedLastPositionX();
+    double positionY = environment.verifiedLastPositionY();
+    double positionZ = environment.verifiedLastPositionZ();
 
     boolean onGround;
     double resetMotion = environment.resetMotion();
@@ -104,9 +104,9 @@ final class ElytraSimulator extends BaseSimulator {
       positionY += colliderResult.motionY();
       positionZ += colliderResult.motionZ();
 
-      double diffX = positionX - environment.verifiedPositionX();
-      double diffY = positionY - environment.verifiedPositionY();
-      double diffZ = positionZ - environment.verifiedPositionZ();
+      double diffX = positionX - environment.verifiedLastPositionX();
+      double diffY = positionY - environment.verifiedLastPositionY();
+      double diffZ = positionZ - environment.verifiedLastPositionZ();
       onGround = colliderResult.onGround();
 
       boolean jumpLessThanExpected = colliderResult.motionY() < jumpUpwardsMotion;

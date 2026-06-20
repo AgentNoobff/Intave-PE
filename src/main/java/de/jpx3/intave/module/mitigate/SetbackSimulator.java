@@ -11,6 +11,7 @@ import de.jpx3.intave.block.shape.BlockShape;
 import de.jpx3.intave.block.type.BlockTypeAccess;
 import de.jpx3.intave.check.movement.Physics;
 import de.jpx3.intave.check.movement.physics.Pose;
+import de.jpx3.intave.check.movement.physics.environment.SimulationEnvironment;
 import de.jpx3.intave.executor.Synchronizer;
 import de.jpx3.intave.klass.Lookup;
 import de.jpx3.intave.klass.trace.Caller;
@@ -250,7 +251,7 @@ public final class SetbackSimulator extends Module {
       // fixes stuck in block below, please remove and fix me differently
       futurePosition.subtract(0, 0.02, 0);
       boundingBox = BoundingBox.fromPosition(user, movementData, futurePosition);
-      futurePosition.add(0, Collision.nonePresent(player, boundingBox) ? 0.03 : 0.0201, 0);
+      futurePosition.add(0, Collision.nonePresent(user, movementData, boundingBox) ? 0.03 : 0.0201, 0);
       boundingBox = BoundingBox.fromPosition(user, movementData, futurePosition);
 
       /*
@@ -454,7 +455,7 @@ public final class SetbackSimulator extends Module {
 
     BoundingBox entityBoundingBox = BoundingBox.fromPosition(user, movementData, teleportLocation);
     movementData.setBoundingBox(entityBoundingBox);
-    movementData.setVerifiedLocation(teleportLocation.clone(), "Emulation-Setback");
+    movementData.setVerifiedLocation(teleportLocation.clone());
 //    player.teleport(teleportLocation);
     if (closeInventoryOnDetection && user.meta().inventory().inventoryOpen()) {
       player.closeInventory();
@@ -534,7 +535,9 @@ public final class SetbackSimulator extends Module {
     motionY = minmax(-4, motionY, 4);
     motionZ = minmax(-4, motionZ, 4);
 
-    BlockShape collisionBox = Collision.shape(player, entityBoundingBox.expand(motionX, motionY, motionZ));
+    User user = UserRepository.userOf(player);
+
+    BlockShape collisionBox = Collision.shape(user, user.meta().movement(), entityBoundingBox.expand(motionX, motionY, motionZ));
 
     // motion y
     motionY = collisionBox.allowedOffset(Y_AXIS, entityBoundingBox, motionY);
@@ -597,6 +600,7 @@ public final class SetbackSimulator extends Module {
 
   private boolean hasEmptyCollisionBox(Player player, BlockPosition blockPosition) {
     User user = UserRepository.userOf(player);
-    return Collision.nonePresent(player, BoundingBox.fromPosition(user, user.meta().movement(), blockPosition));
+    SimulationEnvironment movement = user.meta().movement();
+    return Collision.nonePresent(user, movement, BoundingBox.fromPosition(user, movement, blockPosition));
   }
 }

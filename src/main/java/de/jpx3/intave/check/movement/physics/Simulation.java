@@ -16,9 +16,8 @@ public final class Simulation {
   private MovementConfiguration configuration;
   private ColliderResult colliderResult;
   private String details = "";
-  private int debugInformation = 0;
 
-  private Simulation() {
+	private Simulation() {
   }
 
   private Simulation(
@@ -33,7 +32,6 @@ public final class Simulation {
     this.configuration = configuration;
     this.colliderResult = colliderResult;
     this.details = "";
-    this.debugInformation = 0;
   }
 
   public boolean wasSprinting() {

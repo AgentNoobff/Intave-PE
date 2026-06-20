@@ -34,6 +34,7 @@ import de.jpx3.intave.packet.reader.PacketReaders;
 import de.jpx3.intave.player.fake.FakePlayer;
 import de.jpx3.intave.player.fake.IdentifierReserve;
 import de.jpx3.intave.share.ClientMath;
+import de.jpx3.intave.share.Motion;
 import de.jpx3.intave.share.Position;
 import de.jpx3.intave.user.MessageChannel;
 import de.jpx3.intave.user.User;
@@ -527,13 +528,11 @@ public final class EntityTracker extends Module {
           originalY = entity.position.posY;
           originalZ = entity.position.posZ;
         }
-        movement.positionX = movement.verifiedPositionX = movement.lastPositionX = originalX;
-        movement.positionY = movement.verifiedPositionY = movement.lastPositionY = originalY;
-        movement.positionZ = movement.verifiedPositionZ = movement.lastPositionZ = originalZ;
+        movement.positionX = movement.verifiedLastPositionX = movement.lastPositionX = originalX;
+        movement.positionY = movement.verifiedLastPositionY = movement.lastPositionY = originalY;
+        movement.positionZ = movement.verifiedLastPositionZ = movement.lastPositionZ = originalZ;
         movement.verifiedPositionOrigin = "Riding pos sync (1.8)";
-        movement.setBaseMotionX(0);
-        movement.setBaseMotionY(0);
-        movement.setBaseMotionZ(0);
+        movement.setBaseMotion(Motion.newEmpty());
       }
     }
   }

@@ -19,6 +19,7 @@ import de.jpx3.intave.player.Effects;
 import de.jpx3.intave.share.BoundingBox;
 import de.jpx3.intave.share.ClientMath;
 import de.jpx3.intave.user.User;
+import de.jpx3.intave.user.UserRepository;
 import de.jpx3.intave.user.meta.ConnectionMetadata;
 import de.jpx3.intave.user.meta.MovementMetadata;
 import org.bukkit.Bukkit;
@@ -317,7 +318,9 @@ public final class MovementEmulation extends Module {
     motionY = minmax(-4, motionY, 4);
     motionZ = minmax(-4, motionZ, 4);
 
-    BlockShape collisionBox = Collision.shape(player, entityBoundingBox.expand(motionX, motionY, motionZ));
+    User user = UserRepository.userOf(player);
+
+    BlockShape collisionBox = Collision.shape(user, user.meta().movement(), entityBoundingBox.expand(motionX, motionY, motionZ));
 
     // motion y
     motionY = collisionBox.allowedOffset(Y_AXIS, entityBoundingBox, motionY);

@@ -102,21 +102,21 @@ public final class TeleportApplyEnforcer implements PacketEventSubscriber {
 
     boolean flagModification = false;
     if (relativeXPosition) {
-      positionX += user.meta().movement().verifiedPositionX();
+      positionX += user.meta().movement().verifiedLastPositionX();
       reader.setPositionX(positionX);
       flags.remove(Relative.X);
       flagModification = true;
     }
 
     if (relativeYPosition) {
-      positionY += user.meta().movement().verifiedPositionY();
+      positionY += user.meta().movement().verifiedLastPositionY();
       reader.setPositionY(positionY);
       flags.remove(Relative.Y);
       flagModification = true;
     }
 
     if (relativeZPosition) {
-      positionZ += user.meta().movement().verifiedPositionZ();
+      positionZ += user.meta().movement().verifiedLastPositionZ();
       reader.setPositionZ(positionZ);
       flags.remove(Relative.Z);
       flagModification = true;
@@ -141,7 +141,7 @@ public final class TeleportApplyEnforcer implements PacketEventSubscriber {
     }
     movementData.teleportRelatives = new HashSet<>(flags);
 
-    movementData.setVerifiedLocation(teleportLocation.clone(), "Teleportation to " + teleportLocation);
+    movementData.setVerifiedLocation(teleportLocation.clone());
     if (NEW_TELEPORTATION) {
       movementData.teleportId = packet.getIntegers().read(0);
     }
@@ -423,9 +423,9 @@ public final class TeleportApplyEnforcer implements PacketEventSubscriber {
     movementData.positionX = positionX;
     movementData.positionY = positionY;
     movementData.positionZ = positionZ;
-    movementData.verifiedPositionX = positionX;
-    movementData.verifiedPositionY = positionY;
-    movementData.verifiedPositionZ = positionZ;
+    movementData.verifiedLastPositionX = positionX;
+    movementData.verifiedLastPositionY = positionY;
+    movementData.verifiedLastPositionZ = positionZ;
     movementData.verifiedPositionOrigin = "Teleport";
 
     Motion teleportMotionModify = movementData.teleportMotion;

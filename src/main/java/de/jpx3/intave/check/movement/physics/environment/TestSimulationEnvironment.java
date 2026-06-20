@@ -215,22 +215,22 @@ public final class TestSimulationEnvironment implements SimulationEnvironment {
   }
 
   @Override
-  public double verifiedPositionX() {
+  public double verifiedLastPositionX() {
     return verifiedPositionX;
   }
 
   @Override
-  public double verifiedPositionY() {
+  public double verifiedLastPositionY() {
     return verifiedPositionY;
   }
 
   @Override
-  public double verifiedPositionZ() {
+  public double verifiedLastPositionZ() {
     return verifiedPositionZ;
   }
 
   @Override
-  public void setVerifiedPosition(Position position, String reason) {
+  public void setVerifiedLastPosition(Position position, String reason) {
     verifiedPositionX = position.getX();
     verifiedPositionY = position.getY();
     verifiedPositionZ = position.getZ();
@@ -250,6 +250,14 @@ public final class TestSimulationEnvironment implements SimulationEnvironment {
   public double lastPositionZ() {
     return lastPositionZ;
   }
+
+  @Override
+  public void setLastPosition(double x, double y, double z) {
+    lastPositionX = x;
+    lastPositionY = y;
+    lastPositionZ = z;
+  }
+
 
   @Override
   public void setBoundingBox(BoundingBox boundingBox) {
@@ -292,17 +300,9 @@ public final class TestSimulationEnvironment implements SimulationEnvironment {
   }
 
   @Override
-  public void setBaseMotionX(double baseMotionX) {
+  public void setBaseMotion(double baseMotionX, double baseMotionY, double baseMotionZ) {
     this.baseMotionX = baseMotionX;
-  }
-
-  @Override
-  public void setBaseMotionY(double baseMotionY) {
     this.baseMotionY = baseMotionY;
-  }
-
-  @Override
-  public void setBaseMotionZ(double baseMotionZ) {
     this.baseMotionZ = baseMotionZ;
   }
 
@@ -369,6 +369,11 @@ public final class TestSimulationEnvironment implements SimulationEnvironment {
   @Override
   public double jumpMotion() {
     return jumpHeight;
+  }
+
+  @Override
+  public void setJumpMotion(double jumpMotion) {
+    this.jumpHeight = jumpMotion;
   }
 
   @Override

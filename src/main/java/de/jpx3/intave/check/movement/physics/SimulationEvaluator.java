@@ -34,7 +34,7 @@ public final class SimulationEvaluator {
     MovementMetadata movement = meta.movement();
     double distanceMoved = MathHelper.resolveHorizontalDistance(
       movement.positionX, movement.positionZ,
-      movement.verifiedPositionX, movement.verifiedPositionZ
+      movement.verifiedLastPositionX, movement.verifiedLastPositionZ
     );
     Pose pose = movement.pose();
     double receivedMotionX = movement.motionX();
@@ -233,12 +233,12 @@ public final class SimulationEvaluator {
     if (movement.ticksPast(IN_WATER) <= 3 || movement.ticksPast(IN_LAVA) <= 3) {
       double liquidMotionY;
       if (protocol.waterUpdate()) {
-        liquidMotionY = receivedMotionY + 0.6f - movement.positionY + movement.verifiedPositionY;
+        liquidMotionY = receivedMotionY + 0.6f - movement.positionY + movement.verifiedLastPositionY;
       } else {
         liquidMotionY = receivedMotionY + 0.3f;
       }
       boolean offsetPositionInLiquid = MovementCharacteristics.isOffsetPositionInLiquid(
-        player, movement.boundingBox(), receivedMotionX, liquidMotionY, receivedMotionZ
+        user, movement.boundingBox(), receivedMotionX, liquidMotionY, receivedMotionZ
       );
       boolean maybeCollidedHorizontally = Collision.nearSolidBlock(user, movement.boundingBox().grow(0.2, 0.5, 0.2));
       boolean targetMotion = Math.abs(receivedMotionY - 0.3) < 0.001 || Math.abs(receivedMotionY - 0.34) < 0.001 || Math.abs(receivedMotionY - 0.2470) < 0.001;
@@ -321,7 +321,7 @@ public final class SimulationEvaluator {
     double motionZ = movement.motionZ();
     double distanceMoved = MathHelper.resolveHorizontalDistance(
       movement.positionX, movement.positionZ,
-      movement.verifiedPositionX, movement.verifiedPositionZ
+      movement.verifiedLastPositionX, movement.verifiedLastPositionZ
     );
     double predictedDistanceMoved = Hypot.fast(predictedX, predictedZ);
 
@@ -551,7 +551,7 @@ public final class SimulationEvaluator {
       }
       return Math.max(15, abuseHorizontally * 250);
     }
-    boolean noCollisions = Collision.nonePresent(player, BoundingBox.fromPosition(user, movement, movement.positionX, movement.positionY, movement.positionZ).grow(0.1));
+    boolean noCollisions = Collision.nonePresent(user, movement, BoundingBox.fromPosition(user, movement, movement.positionX, movement.positionY, movement.positionZ).grow(0.1));
     double multiplier = (abuseHorizontally > 0.1 ? 20.0 : 10.0) *
       (noCollisions ? 3 : 2) *
       (1 / stackMultiplier);

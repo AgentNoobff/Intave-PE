@@ -28,7 +28,6 @@ import de.jpx3.intave.check.CheckStatistics;
 import de.jpx3.intave.check.CheckViolationLevelDecrementer;
 import de.jpx3.intave.check.movement.physics.*;
 import de.jpx3.intave.check.movement.physics.evaluation.EvaluationTag;
-import de.jpx3.intave.connect.sibyl.SibylBroadcast;
 import de.jpx3.intave.diagnostic.message.DebugBroadcast;
 import de.jpx3.intave.diagnostic.message.MessageSeverity;
 import de.jpx3.intave.diagnostic.timings.Timings;
@@ -209,10 +208,10 @@ public final class Physics extends Check {
       if (movementData.ticksPast(VELOCITY) == 0) {
         if (movementData.physicsJumped && movementData.lastVelocityApplicableForJumpDenial()) {
           movementData.physicsJumpedOverrideVL++;
-          if (movementData.applyJumpCM()) {
-            SibylBroadcast.broadcast("[CM] " + player.getName() + " jumped with velocity");
-            user.nerfOnce(AttackNerfStrategy.DMG_HIGH, "92");
-          }
+//          if (movementData.applyJumpCM()) {
+//            SibylBroadcast.broadcast("[CM] " + player.getName() + " jumped with velocity");
+//            user.nerfOnce(AttackNerfStrategy.DMG_HIGH, "92");
+//          }
         } else if (movementData.physicsJumpedOverrideVL > 0) {
           movementData.physicsJumpedOverrideVL = Math.max(0, movementData.physicsJumpedOverrideVL - 0.5);
         }
@@ -285,7 +284,7 @@ public final class Physics extends Check {
     SimpleColliderResult colliderResult = Colliders.simplifiedCollision(
       user.player(),
       movementData,
-      movementData.verifiedPositionX, movementData.verifiedPositionY, movementData.verifiedPositionZ,
+      movementData.verifiedLastPositionX, movementData.verifiedLastPositionY, movementData.verifiedLastPositionZ,
       motionX, motionY, motionZ
     );
     movementData.onGround = colliderResult.onGround();
@@ -303,7 +302,7 @@ public final class Physics extends Check {
       SimpleColliderResult colliderResult = Colliders.simplifiedCollision(
         user.player(),
         movementData,
-        movementData.verifiedPositionX, movementData.verifiedPositionY, movementData.verifiedPositionZ,
+        movementData.verifiedLastPositionX, movementData.verifiedLastPositionY, movementData.verifiedLastPositionZ,
         motionX, motionY, motionZ
       );
       motionX = colliderResult.motionX();
@@ -357,9 +356,9 @@ public final class Physics extends Check {
     double receivedPositionX = movementData.positionX();
     double receivedPositionY = movementData.positionY();
     double receivedPositionZ = movementData.positionZ();
-    double positionX = movementData.verifiedPositionX();
-    double positionY = movementData.verifiedPositionY();
-    double positionZ = movementData.verifiedPositionZ();
+    double positionX = movementData.verifiedLastPositionX();
+    double positionY = movementData.verifiedLastPositionY();
+    double positionZ = movementData.verifiedLastPositionZ();
 
     boolean onLadderCurrent = MovementCharacteristics.onClimbable(user, positionX, positionY, positionZ);
     boolean onLadder = onLadderCurrent || movementData.onLadderLast;
@@ -403,7 +402,7 @@ public final class Physics extends Check {
       boolean actuallyMoved = (Math.abs(predictedX) > 0.01 || Math.abs(predictedZ) > 0.01);
 
       boolean noCollisionOnHighVersion = !(protocol.cavesAndCliffsUpdate()
-        && Collision.present(player, movementData.boundingBox().growHorizontally(0.3)));
+        && Collision.present(user, movementData, movementData.boundingBox().growHorizontally(0.3)));
 
       if (distance > 0.005 && !onLadder && noCollisionOnHighVersion) {
         if (actuallyMoved) {
@@ -555,8 +554,8 @@ public final class Physics extends Check {
     BoundingBox verifiedBoundingBox = BoundingBox.fromPosition(user, movementData, verifiedLocation);
     BoundingBox currentBoundingBox = BoundingBox.fromPosition(user, movementData, receivedPositionX, receivedPositionY, receivedPositionZ);
 
-    boolean boundingBoxIntersectionLast = Collision.present(player, verifiedBoundingBox);
-    boolean boundingBoxIntersectionCurrent = Collision.present(player, currentBoundingBox);
+    boolean boundingBoxIntersectionLast = Collision.present(user, movementData, verifiedBoundingBox);
+    boolean boundingBoxIntersectionCurrent = Collision.present(user, movementData, currentBoundingBox);
     boolean movedIntoBlock = !boundingBoxIntersectionLast && boundingBoxIntersectionCurrent;
     if (boundingBoxIntersectionCurrent && !spectator) {
       List<BoundingBox> intersectionBoundingBoxesCurrent = Collision.__INVALID__resolveBoxes__OnlyForBoxIntersectionChecks__(player, currentBoundingBox);
@@ -600,7 +599,7 @@ public final class Physics extends Check {
     // Update the player's verified location
     if (spectator || violationLevelIncrease == 0 && !boundingBoxIntersectionCurrent) {
       Location location = new Location(player.getWorld(), receivedPositionX, receivedPositionY, receivedPositionZ, movementData.rotationYaw, movementData.rotationPitch);
-      movementData.setVerifiedLocation(location, "Movement validation (normal)");
+      movementData.setVerifiedLocation(location);
     }
 
     if (violationLevelIncrease > 0) {
@@ -668,7 +667,7 @@ public final class Physics extends Check {
       granularDebugs.put("insig", formatDouble(violationLevelData.physicsInsignificantBufferVL, 1));
       granularDebugs.put("acc/off", formatDouble(violationLevelData.physicsOffset, 2));
       granularDebugs.put("s/c v", MinecraftVersion.getCurrentVersion().getVersion() + " / " + user.protocolVersion());
-      BlockShape collShape = Collision.shape(player, currentBoundingBox);
+      BlockShape collShape = Collision.shape(user, movementData, currentBoundingBox);
       granularDebugs.put("coll", collShape.toString());
       granularDebugs.put("coll_out", collShape.outline().toCompactString());
       granularDebugs.put("v/tags", verticalTags.stream().map(EvaluationTag::toString).map(String::toUpperCase).distinct().collect(Collectors.joining(",")));

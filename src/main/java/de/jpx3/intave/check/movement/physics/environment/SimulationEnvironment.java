@@ -14,24 +14,9 @@ import org.bukkit.Material;
 import org.bukkit.util.Vector;
 
 public interface SimulationEnvironment {
-  /**
-   * pose
-   *
-   * @return
-   */
   Pose pose();
-
-  /**
-   * look vector
-   *
-   * @return
-   */
   Vector lookVector();
 
-
-  /**
-   * Enter the new (untrusted) movement into the environment.
-   */
   void updateMovement(
 	  double newPositionX, double newPositionY, double newPositionZ,
 	  float newRotationYaw, float newRotationPitch,
@@ -62,31 +47,27 @@ public interface SimulationEnvironment {
   double positionY();
   double positionZ();
 
-  /**
-   * verified position
-   *
-   * @return
-   */
-  default Position verifiedPosition() {
-    return new Position(verifiedPositionX(), verifiedPositionY(), verifiedPositionZ());
+  default Position verifiedLastPosition() {
+    return new Position(verifiedLastPositionX(), verifiedLastPositionY(), verifiedLastPositionZ());
   }
-  double verifiedPositionX();
-  double verifiedPositionY();
-  double verifiedPositionZ();
+  double verifiedLastPositionX();
+  double verifiedLastPositionY();
+  double verifiedLastPositionZ();
 
-  void setVerifiedPosition(Position position, String reason);
+  void setVerifiedLastPosition(Position position, String reason);
 
-  /**
-   * last position
-   *
-   * @return
-   */
   default Position lastPosition() {
     return new Position(lastPositionX(), lastPositionY(), lastPositionZ());
   }
   double lastPositionX();
   double lastPositionY();
   double lastPositionZ();
+
+  default void setLastPosition(Position position) {
+    setLastPosition(position.getX(), position.getY(), position.getZ());
+  }
+
+  void setLastPosition(double x, double y, double z);
 
   void setBoundingBox(BoundingBox boundingBox);
   BoundingBox boundingBox();
@@ -106,13 +87,13 @@ public interface SimulationEnvironment {
   double baseMotionZ();
 
   default void setBaseMotion(Motion baseMotion) {
-    setBaseMotionX(baseMotion.motionX());
-    setBaseMotionY(baseMotion.motionY());
-    setBaseMotionZ(baseMotion.motionZ());
+    setBaseMotion(baseMotion.motionX(), baseMotion.motionY(), baseMotion.motionZ());
   }
-  void setBaseMotionX(double baseMotionX);
-  void setBaseMotionY(double baseMotionY);
-  void setBaseMotionZ(double baseMotionZ);
+  void setBaseMotion(
+    double baseMotionX,
+    double baseMotionY,
+    double baseMotionZ
+  );
 
   boolean motionXReset();
   boolean motionZReset();
@@ -130,12 +111,14 @@ public interface SimulationEnvironment {
   float friction();
   double stepHeight();
   double resetMotion();
+
   double jumpMotion();
+  void setJumpMotion(double jumpMotion);
+
   double gravity();
 
   float blockSpeedFactor();
 
-  // states
   boolean isSneaking();
   boolean isSprinting();
   boolean inWater();

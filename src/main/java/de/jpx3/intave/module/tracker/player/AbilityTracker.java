@@ -87,9 +87,9 @@ public final class AbilityTracker extends Module {
     }
     if (critical) {
       if (movement.criticalFlyingDisallowStacks++ == 0) {
-        movement.criticalEnterPosX = movement.verifiedPositionX;
-        movement.criticalEnterPosY = movement.verifiedPositionY;
-        movement.criticalEnterPosZ = movement.verifiedPositionZ;
+        movement.criticalEnterPosX = movement.verifiedLastPositionX;
+        movement.criticalEnterPosY = movement.verifiedLastPositionY;
+        movement.criticalEnterPosZ = movement.verifiedLastPositionZ;
       }
     }
     user.packetTickFeedback(event, () -> {
@@ -114,9 +114,9 @@ public final class AbilityTracker extends Module {
     if (movementData.criticalFlyingDisallowStacks > 0 &&
       !movementData.criticalFlyingDisallowWasTeleported
     ) {
-      double deltaX = movementData.verifiedPositionX - movementData.criticalEnterPosX;
-      double deltaY = movementData.verifiedPositionY - movementData.criticalEnterPosY;
-      double deltaZ = movementData.verifiedPositionZ - movementData.criticalEnterPosZ;
+      double deltaX = movementData.verifiedLastPositionX - movementData.criticalEnterPosX;
+      double deltaY = movementData.verifiedLastPositionY - movementData.criticalEnterPosY;
+      double deltaZ = movementData.verifiedLastPositionZ - movementData.criticalEnterPosZ;
       double distance = Math.sqrt(deltaX * deltaX + deltaY * deltaY + deltaZ * deltaZ);
       if (distance > 3 && movementData.criticalTeleportRateLimiter.tryAcquire()) {
         Vector setback = new Vector(0, 0, 0);

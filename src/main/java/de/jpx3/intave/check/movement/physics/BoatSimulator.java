@@ -42,7 +42,7 @@ public final class BoatSimulator extends BaseSimulator {
     updateMotion(user, motion);
     controlBoat(user, motion);
     ColliderResult collision = Colliders.collision(
-      user, environment, motion, movement.inWeb, movement.verifiedPositionX, movement.verifiedPositionY, movement.verifiedPositionZ
+      user, environment, motion, movement.inWeb, movement.verifiedLastPositionX, movement.verifiedLastPositionY, movement.verifiedLastPositionZ
     );
 
     Timings.CHECK_PHYSICS_SIMULATOR_BOAT.stop();
@@ -142,7 +142,7 @@ public final class BoatSimulator extends BaseSimulator {
     } else {
       switch (movement.boatStatus) {
         case IN_WATER:
-          d2 = (movement.waterLevel - movement.verifiedPositionY) / (double) movement.height;
+          d2 = (movement.waterLevel - movement.verifiedLastPositionY) / (double) movement.height;
           movement.momentum = 0.9f;
           break;
         case UNDER_FLOWING_WATER:
@@ -198,7 +198,6 @@ public final class BoatSimulator extends BaseSimulator {
   }
 
   private float boatGlide(User user) {
-    Player player = user.player();
     MovementMetadata movementMeta = user.meta().movement();
     BoundingBox axisalignedbb = BoundingBox.fromPosition(user, movementMeta, movementMeta.position());
     BoundingBox axisalignedbb1 = new BoundingBox(axisalignedbb.minX, axisalignedbb.minY - 0.001D, axisalignedbb.minZ, axisalignedbb.maxX, axisalignedbb.minY, axisalignedbb.maxZ);
@@ -219,7 +218,7 @@ public final class BoatSimulator extends BaseSimulator {
           for (int y = minY; y < maxY; ++y) {
             if (j2 <= 0 || y != minY && y != maxY - 1) {
               BoundingBox boundingBox = new BoundingBox(x, y, z, x + 1, y + 1, z + 1);
-              if (Collision.present(player, boundingBox)) {
+              if (Collision.present(user, movementMeta, boundingBox)) {
                 Material material = VolatileBlockAccess.typeAccess(user, x, y, z);
                 slipperiness += BlockProperties.of(material).slipperiness();
                 ++collisions;

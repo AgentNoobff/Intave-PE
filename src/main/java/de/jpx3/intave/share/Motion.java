@@ -207,6 +207,10 @@ public final class Motion {
 		return new Motion(0.0, 0.0, 0.0);
 	}
 
+	public static Motion of(double motionX, double motionY, double motionZ) {
+		return new Motion(motionX, motionY, motionZ);
+	}
+
 	public static Motion copyFrom(Motion context) {
 		return new Motion(context.motionX, context.motionY, context.motionZ);
 	}

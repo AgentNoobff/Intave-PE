@@ -188,6 +188,10 @@ public final class ProtocolMetadata {
     return protocolVersion >= VER_1_17;
   }
 
+  public boolean useItemMovementPacket() {
+    return protocolVersion >= VER_1_17 && protocolVersion <= VER_1_21_5;
+  }
+
   public boolean beeUpdate() {
     return protocolVersion >= VER_1_15;
   }

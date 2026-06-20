@@ -127,9 +127,9 @@ class BaseSimulator extends Simulator {
 
     float yawSine = environment.yawSine();
     float yawCosine = environment.yawCosine();
-    double positionX = environment.verifiedPositionX();
-    double positionY = environment.verifiedPositionY();
-    double positionZ = environment.verifiedPositionZ();
+    double positionX = environment.verifiedLastPositionX();
+    double positionY = environment.verifiedLastPositionY();
+    double positionZ = environment.verifiedLastPositionZ();
     boolean inWater = environment.inWater();
     boolean inLava = environment.inLava();
     boolean elytraFlying = pose == Pose.FALL_FLYING;
@@ -274,9 +274,9 @@ class BaseSimulator extends Simulator {
 
     boolean onLadder = MovementCharacteristics.onClimbable(
       user,
-      environment.verifiedPositionX(),
-      environment.verifiedPositionY(),
-      environment.verifiedPositionZ()
+      environment.verifiedLastPositionX(),
+      environment.verifiedLastPositionY(),
+      environment.verifiedLastPositionZ()
     );
 
     if (onLadder) {
@@ -289,9 +289,9 @@ class BaseSimulator extends Simulator {
 //      }
       Material type = VolatileBlockAccess.typeAccess(
         user, user.player().getWorld(),
-        floor(environment.verifiedPositionX()),
-        floor(environment.verifiedPositionY()),
-        floor(environment.verifiedPositionZ())
+        floor(environment.verifiedLastPositionX()),
+        floor(environment.verifiedLastPositionY()),
+        floor(environment.verifiedLastPositionZ())
       );
       if (environment.isSneaking() && context.motionY < 0.0D && BlockProperties.of(type).climbableSneakLimit()) {
         context.motionY = 0.0D;
@@ -324,9 +324,9 @@ class BaseSimulator extends Simulator {
     Player player = user.player();
     MovementMetadata movementData = user.meta().movement();
 
-    double positionX = environment.verifiedPositionX();
-    double positionY = environment.verifiedPositionY();
-    double positionZ = environment.verifiedPositionZ();
+    double positionX = environment.verifiedLastPositionX();
+    double positionY = environment.verifiedLastPositionY();
+    double positionZ = environment.verifiedLastPositionZ();
 
     boolean onGround;
     double slipperiness = environment.lastOnGround()
@@ -349,9 +349,9 @@ class BaseSimulator extends Simulator {
       positionY += colliderResult.motionY();
       positionZ += colliderResult.motionZ();
 
-      double diffX = positionX - environment.verifiedPositionX();
-      double diffY = positionY - environment.verifiedPositionY();
-      double diffZ = positionZ - environment.verifiedPositionZ();
+      double diffX = positionX - environment.verifiedLastPositionX();
+      double diffY = positionY - environment.verifiedLastPositionY();
+      double diffZ = positionZ - environment.verifiedLastPositionZ();
       onGround = colliderResult.onGround();
 
       boolean jumpLessThanExpected = colliderResult.motionY() < jumpUpwardsMotion;
@@ -473,9 +473,9 @@ class BaseSimulator extends Simulator {
     double slipperiness;
 
     if (environment.lastOnGround()) {
-      double blockPositionX = floor(environment.verifiedPositionX());
-      double blockPositionY = floor(environment.verifiedPositionY() - environment.frictionPosSubtraction());
-      double blockPositionZ = floor(environment.verifiedPositionZ());
+      double blockPositionX = floor(environment.verifiedLastPositionX());
+      double blockPositionY = floor(environment.verifiedLastPositionY() - environment.frictionPosSubtraction());
+      double blockPositionZ = floor(environment.verifiedLastPositionZ());
       slipperiness = MovementCharacteristics.currentSlipperiness(user, player.getWorld(), blockPositionX, blockPositionY, blockPositionZ);
     } else {
       slipperiness = 0.91f;
@@ -635,7 +635,7 @@ class BaseSimulator extends Simulator {
   private void simulateApplyEffectsFromBlocks(
     User user, SimulationEnvironment environment, Motion motion, BoundingBox boundingBox
   ) {
-    Position from = environment.verifiedPosition();
+    Position from = environment.verifiedLastPosition();
     Position to = environment.position();
     Motion move = from.motionTo(to);
 
@@ -737,10 +737,10 @@ class BaseSimulator extends Simulator {
     context.motionY -= 0.02D;
     boolean offsetPositionInLiquid =
       MovementCharacteristics.isOffsetPositionInLiquid(
-        user.player(),
+        user,
         boundingBox,
         context.motionX,
-        context.motionY + 0.6f - positionY + environment.verifiedPositionY(),
+        context.motionY + 0.6f - positionY + environment.verifiedLastPositionY(),
         context.motionZ
       );
     if (collidedHorizontally && !offsetPositionInLiquid) {
