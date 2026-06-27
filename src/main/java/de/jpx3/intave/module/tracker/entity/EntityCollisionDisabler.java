@@ -1,9 +1,8 @@
 package de.jpx3.intave.module.tracker.entity;
 
-import com.comphenix.protocol.events.InternalStructure;
-import com.comphenix.protocol.events.PacketContainer;
-import com.comphenix.protocol.events.PacketEvent;
-import com.comphenix.protocol.reflect.StructureModifier;
+import com.github.retrooper.packetevents.event.PacketSendEvent;
+import com.github.retrooper.packetevents.event.ProtocolPacketEvent;
+import com.github.retrooper.packetevents.wrapper.play.server.WrapperPlayServerTeams;
 import de.jpx3.intave.adapter.MinecraftVersions;
 import de.jpx3.intave.module.Module;
 import de.jpx3.intave.module.linker.packet.ListenerPriority;
@@ -15,8 +14,6 @@ import static de.jpx3.intave.module.linker.packet.PacketId.Server.SCOREBOARD_TEA
 
 public final class EntityCollisionDisabler extends Module {
   private static final boolean DISABLE_ENTITY_COLLISIONS = MinecraftVersions.VER1_9_0.atOrAbove();
-  private static final int COLLISION_RULE_FIELD = (MinecraftVersions.VER1_13_0.atOrAbove() ? (MinecraftVersions.VER1_17_0.atOrAbove() ? 1 : 2) : 5);
-  private static final boolean INDIRECT_SCOREBOARD_ACCESS = MinecraftVersions.VER1_17_0.atOrAbove();
 
   @PacketSubscription(
     priority = ListenerPriority.HIGHEST,
@@ -24,27 +21,19 @@ public final class EntityCollisionDisabler extends Module {
       SCOREBOARD_TEAM
     }
   )
-  public void receiveScoreboardUpdate(PacketEvent event) {
+  public void receiveScoreboardUpdate(ProtocolPacketEvent event) {
     if (!DISABLE_ENTITY_COLLISIONS) {
       return;
     }
-    PacketContainer packet = event.getPacket();
-    if (INDIRECT_SCOREBOARD_ACCESS) {
-      //noinspection OptionalAssignedToNull
-      if (packet.getSpecificModifier(Optional.class).read(0) != null) {
-        Optional<InternalStructure> optionalStructure = packet.getOptionalStructures().read(0);
-        if (optionalStructure.isPresent()) {
-          InternalStructure structure = optionalStructure.get();
-          StructureModifier<String> strings = structure.getStrings();
-          applyNoCollisionRule(strings);
-        }
-      }
-    } else {
-      applyNoCollisionRule(packet.getStrings());
+    // PacketEvents normalises the team-info structure across versions, so the version-specific field
+    // index arithmetic the ProtocolLib code carried is no longer required.
+    WrapperPlayServerTeams packet = new WrapperPlayServerTeams((PacketSendEvent) event);
+    Optional<WrapperPlayServerTeams.ScoreBoardTeamInfo> teamInfo = packet.getTeamInfo();
+    if (teamInfo.isPresent()) {
+      WrapperPlayServerTeams.ScoreBoardTeamInfo info = teamInfo.get();
+      info.setCollisionRule(WrapperPlayServerTeams.CollisionRule.NEVER);
+      packet.setTeamInfo(info);
+      event.markForReEncode(true);
     }
-  }
-
-  private void applyNoCollisionRule(StructureModifier<String> strings) {
-    strings.write(COLLISION_RULE_FIELD, "never");
   }
 }

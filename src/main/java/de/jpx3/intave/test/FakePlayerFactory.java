@@ -1,6 +1,5 @@
 package de.jpx3.intave.test;
 
-import com.comphenix.protocol.utility.ByteBuddyGenerated;
 import com.google.common.collect.ImmutableList;
 import de.jpx3.intave.IntavePlugin;
 import de.jpx3.intave.adapter.MinecraftVersions;
@@ -153,10 +152,10 @@ public final class FakePlayerFactory {
     }
   }
 
-  private static <T> DynamicType.Builder.MethodDefinition.ImplementationDefinition.Optional<T> createSubclass(
+  private static <T> DynamicType.Builder<T> createSubclass(
     Class<T> clz, ConstructorStrategy.Default constructorStrategy
   ) {
-    return (new ByteBuddy()).subclass(clz, constructorStrategy).implement(ByteBuddyGenerated.class);
+    return (new ByteBuddy()).subclass(clz, constructorStrategy);
   }
 
   private static final UUID FAKE_TEST_UUID = UUID.fromString("00000000-0000-0000-0000-000000000000");

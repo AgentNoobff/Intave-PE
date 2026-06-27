@@ -1,16 +1,14 @@
 package de.jpx3.intave.module.actionbar;
 
-import com.comphenix.protocol.events.PacketContainer;
-import com.comphenix.protocol.events.PacketEvent;
-import com.comphenix.protocol.wrappers.EnumWrappers;
-import com.comphenix.protocol.wrappers.WrappedChatComponent;
-import de.jpx3.intave.adapter.MinecraftVersions;
+import com.github.retrooper.packetevents.event.PacketSendEvent;
+import com.github.retrooper.packetevents.event.ProtocolPacketEvent;
+import com.github.retrooper.packetevents.protocol.chat.ChatTypes;
+import com.github.retrooper.packetevents.wrapper.play.server.WrapperPlayServerChatMessage;
 import de.jpx3.intave.executor.TaskTracker;
 import de.jpx3.intave.module.Module;
 import de.jpx3.intave.module.Modules;
 import de.jpx3.intave.module.linker.packet.ListenerPriority;
 import de.jpx3.intave.module.linker.packet.PacketSubscription;
-import de.jpx3.intave.packet.PacketSender;
 import de.jpx3.intave.player.ActionBar;
 import de.jpx3.intave.user.User;
 import de.jpx3.intave.user.UserRepository;
@@ -21,8 +19,6 @@ import java.util.UUID;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
 
-import static com.comphenix.protocol.PacketType.Play.Server.CHAT;
-import static com.comphenix.protocol.PacketType.Play.Server.SET_ACTION_BAR_TEXT;
 import static de.jpx3.intave.module.linker.packet.PacketId.Server.CHAT_OUT;
 
 public final class ActionBarDisplayer extends Module {
@@ -43,13 +39,12 @@ public final class ActionBarDisplayer extends Module {
     }
 //    engine = Engine.ASYNC_INTERNAL
   )
-  public void clientClickUpdate(PacketEvent event) {
+  public void clientClickUpdate(ProtocolPacketEvent event) {
     Player player = event.getPlayer();
     User user = UserRepository.userOf(player);
-    PacketContainer packet = event.getPacket();
-    Byte read = packet.getBytes().readSafely(0);
-    EnumWrappers.ChatType type = packet.getChatTypes().read(0);
-    if (((read != null && read.intValue() == 2) || (type == EnumWrappers.ChatType.GAME_INFO)) && inSubscription(user)) {
+    WrapperPlayServerChatMessage packet = new WrapperPlayServerChatMessage((PacketSendEvent) event);
+    boolean actionBar = packet.getMessage().getType() == ChatTypes.GAME_INFO;
+    if (actionBar && inSubscription(user)) {
       event.setCancelled(true);
     }
   }

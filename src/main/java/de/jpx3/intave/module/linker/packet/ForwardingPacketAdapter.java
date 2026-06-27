@@ -1,77 +1,66 @@
 package de.jpx3.intave.module.linker.packet;
 
-import com.comphenix.protocol.PacketType;
-import com.comphenix.protocol.events.ListenerPriority;
-import com.comphenix.protocol.events.PacketAdapter;
-import com.comphenix.protocol.events.PacketEvent;
+import com.github.retrooper.packetevents.event.PacketListenerPriority;
+import com.github.retrooper.packetevents.event.PacketReceiveEvent;
+import com.github.retrooper.packetevents.event.PacketSendEvent;
+import com.github.retrooper.packetevents.protocol.ConnectionState;
+import com.github.retrooper.packetevents.protocol.packettype.PacketTypeCommon;
 import de.jpx3.intave.IntavePlugin;
 import de.jpx3.intave.user.User;
 import de.jpx3.intave.user.UserRepository;
 import org.bukkit.entity.Player;
 
-import java.util.Arrays;
 import java.util.Collection;
 
 public final class ForwardingPacketAdapter extends WeakReferencePacketAdapter {
-  private static final boolean TEMP_PLAYER_CHECK;
-
-  static {
-    TEMP_PLAYER_CHECK = Arrays.stream(PacketEvent.class.getMethods())
-      .anyMatch(method -> method.getName().equalsIgnoreCase("isPlayerTemporary"));
-  }
-
+  private final PacketTypeCommon packetType;
   private final Collection<FilteringPacketAdapter> targetList;
 
   public ForwardingPacketAdapter(
     IntavePlugin plugin,
-    PacketType packetType,
+    PacketTypeCommon packetType,
     Collection<FilteringPacketAdapter> targetList
   ) {
-    super(plugin, ListenerPriority.LOWEST, new PacketType[]{packetType}, ALLOW_ASYNC_SENDING);
+    super(plugin, PacketListenerPriority.LOWEST, new PacketTypeCommon[]{packetType});
+    this.packetType = packetType;
     this.targetList = targetList;
   }
 
   @Override
-  public void onPacketSending(PacketEvent event) {
-    if (TEMP_PLAYER_CHECK) {
-      // perform temporary check
-      if (event.isPlayerTemporary()) {
-        return;
-      }
-    }
-    Player player = event.getPlayer();
-    if (player == null) {
+  public void onPacketSend(PacketSendEvent event) {
+    if (event.getPacketType() != packetType) {
       return;
     }
-    // There will not be a user on login packet send
-    if (event.getPacketType() != PacketType.Play.Server.LOGIN) {
-      User user = UserRepository.userOf(player);
-      if (user.shouldIgnoreNextOutboundPacket()) {
-//      user.receiveNextOutboundPacketAgain();
-        return;
-      }
+    // PacketEvents fires events during LOGIN/CONFIGURATION too; gate to in-game players only.
+    Player player = event.getPlayer();
+    if (player == null || event.getConnectionState() != ConnectionState.PLAY) {
+      return;
     }
-    for (PacketAdapter filteringPacketAdapter : targetList) {
-      filteringPacketAdapter.onPacketSending(event);
+    User user = UserRepository.userOf(player);
+    if (user.shouldIgnoreNextOutboundPacket()) {
+      return;
+    }
+    for (FilteringPacketAdapter filteringPacketAdapter : targetList) {
+      filteringPacketAdapter.onPacketSend(event);
     }
   }
 
   @Override
-  public void onPacketReceiving(PacketEvent event) {
-    if (TEMP_PLAYER_CHECK) {
-      // perform temporary check
-      if (event.isPlayerTemporary()) {
-//          Timings.packetProcessing.stop();
-        return;
-      }
+  public void onPacketReceive(PacketReceiveEvent event) {
+    if (event.getPacketType() != packetType) {
+      return;
     }
-    User user = UserRepository.userOf(event.getPlayer());
+    Player player = event.getPlayer();
+    if (player == null || event.getConnectionState() != ConnectionState.PLAY) {
+      return;
+    }
+    User user = UserRepository.userOf(player);
     if (user.shouldIgnoreNextInboundPacket()) {
       user.receiveNextInboundPacketAgain();
       return;
     }
-    for (PacketAdapter filteringPacketAdapter : targetList) {
-      filteringPacketAdapter.onPacketReceiving(event);
+    for (FilteringPacketAdapter filteringPacketAdapter : targetList) {
+      filteringPacketAdapter.onPacketReceive(event);
     }
   }
 

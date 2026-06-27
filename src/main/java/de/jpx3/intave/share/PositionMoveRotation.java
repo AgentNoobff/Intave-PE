@@ -1,9 +1,10 @@
 package de.jpx3.intave.share;
 
-import com.comphenix.protocol.events.PacketContainer;
+import com.github.retrooper.packetevents.event.PacketSendEvent;
+import com.github.retrooper.packetevents.event.ProtocolPacketEvent;
+import com.github.retrooper.packetevents.wrapper.play.server.WrapperPlayServerPlayerPositionAndLook;
 import de.jpx3.intave.codec.StreamCodec;
 import de.jpx3.intave.packet.Relative;
-import de.jpx3.intave.packet.converter.PosMoveRotConverter;
 import io.netty.buffer.ByteBuf;
 
 import java.util.Set;
@@ -43,13 +44,16 @@ public final class PositionMoveRotation {
   }
 
   public static PositionMoveRotation firstFrom(
-    PacketContainer packet
+    ProtocolPacketEvent event
   ) {
-    return packet.getModifier()
-      .withType(
-        PosMoveRotConverter.nativePositionMoveRotClass,
-        PosMoveRotConverter.INSTANCE
-      ).read(0);
+    WrapperPlayServerPlayerPositionAndLook wrapper =
+      new WrapperPlayServerPlayerPositionAndLook((PacketSendEvent) event);
+    // Pre-1.21.2 teleports carry no delta motion; PacketEvents normalizes position/rotation getters.
+    return new PositionMoveRotation(
+      new Position(wrapper.getX(), wrapper.getY(), wrapper.getZ()),
+      Motion.newEmpty(),
+      new Rotation(wrapper.getYaw(), wrapper.getPitch())
+    );
   }
 
   // If a teleport flag is set, we use the old value and add the change to it

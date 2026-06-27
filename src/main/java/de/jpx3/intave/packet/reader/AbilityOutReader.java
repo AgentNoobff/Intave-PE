@@ -1,15 +1,22 @@
 package de.jpx3.intave.packet.reader;
 
+import com.github.retrooper.packetevents.event.PacketSendEvent;
+import com.github.retrooper.packetevents.wrapper.play.server.WrapperPlayServerPlayerAbilities;
+
 public class AbilityOutReader extends AbstractPacketReader {
+  private WrapperPlayServerPlayerAbilities wrapper() {
+    return new WrapperPlayServerPlayerAbilities((PacketSendEvent) event());
+  }
+
   public float flyingSpeed() {
-    return packet().getFloat().read(0);
+    return wrapper().getFlySpeed();
   }
 
   public float walkingSpeed() {
-    return packet().getFloat().read(1);
+    return wrapper().getFOVModifier();
   }
 
   public boolean flyingAllowed() {
-    return packet().getBooleans().read(2);
+    return wrapper().isFlightAllowed();
   }
 }

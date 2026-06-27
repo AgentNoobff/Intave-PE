@@ -1,7 +1,7 @@
 package de.jpx3.intave.player.fake;
 
-import com.comphenix.protocol.wrappers.WrappedGameProfile;
-import com.comphenix.protocol.wrappers.WrappedSignedProperty;
+import com.github.retrooper.packetevents.protocol.player.TextureProperty;
+import com.github.retrooper.packetevents.protocol.player.UserProfile;
 import de.jpx3.intave.IntavePlugin;
 import de.jpx3.intave.access.IntaveInternalException;
 import de.jpx3.intave.connect.IntaveDomains;
@@ -19,7 +19,7 @@ import java.util.UUID;
 import java.util.concurrent.ThreadLocalRandom;
 
 public final class ProfileGenerator {
-  public static WrappedGameProfile acquireGameProfile() {
+  public static UserProfile acquireGameProfile() {
     UUID uuid;
     boolean noConnection = false;
     try {
@@ -39,19 +39,19 @@ public final class ProfileGenerator {
       uuid = UUID.randomUUID();
       noConnection = true;
     }
-    WrappedGameProfile wrappedGameProfile;
+    UserProfile wrappedGameProfile;
     if (noConnection) {
       String name = randomString();
-      wrappedGameProfile = new WrappedGameProfile(uuid, name);
+      wrappedGameProfile = new UserProfile(uuid, name);
     } else {
       JSONObject jsonObject = connect(uuid);
       if (jsonObject == null) {
         String name = randomString();
-        wrappedGameProfile = new WrappedGameProfile(uuid, name);
+        wrappedGameProfile = new UserProfile(uuid, name);
         return wrappedGameProfile;
       }
       String name = readNameFromJson(jsonObject);
-      wrappedGameProfile = new WrappedGameProfile(uuid, name);
+      wrappedGameProfile = new UserProfile(uuid, name);
       applySkinToProfile(wrappedGameProfile, jsonObject);
     }
     return wrappedGameProfile;
@@ -94,7 +94,7 @@ public final class ProfileGenerator {
   }
 
   private static void applySkinToProfile(
-    WrappedGameProfile wrappedGameProfile,
+    UserProfile wrappedGameProfile,
     JSONObject jsonObject
   ) {
     try {
@@ -103,7 +103,7 @@ public final class ProfileGenerator {
         JSONObject object = (JSONObject) property;
         String value = (String) object.get("value");
         String signature = (String) object.get("signature");
-        wrappedGameProfile.getProperties().put("textures", new WrappedSignedProperty("textures", value, signature));
+        wrappedGameProfile.getTextureProperties().add(new TextureProperty("textures", value, signature));
       }
     } catch (Exception exception) {
       throw new IntaveInternalException(exception);

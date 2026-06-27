@@ -1,6 +1,5 @@
 package de.jpx3.intave.test;
 
-import com.comphenix.protocol.utility.ByteBuddyGenerated;
 import de.jpx3.intave.IntavePlugin;
 import net.bytebuddy.ByteBuddy;
 import net.bytebuddy.description.ByteCodeElement;
@@ -80,7 +79,7 @@ public final class FakeWorldFactory {
 		}
 	}
 
-	private static <T> DynamicType.Builder.MethodDefinition.ImplementationDefinition.Optional<T> createSubclass(Class<T> clz, ConstructorStrategy.Default constructorStrategy) {
-		return (new ByteBuddy()).subclass(clz, constructorStrategy).implement(ByteBuddyGenerated.class);
+	private static <T> DynamicType.Builder<T> createSubclass(Class<T> clz, ConstructorStrategy.Default constructorStrategy) {
+		return (new ByteBuddy()).subclass(clz, constructorStrategy);
 	}
 }

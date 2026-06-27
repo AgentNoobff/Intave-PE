@@ -1,14 +1,14 @@
 package de.jpx3.intave.share;
 
-import com.comphenix.protocol.utility.MinecraftMethods;
-import com.comphenix.protocol.utility.MinecraftReflection;
 import de.jpx3.intave.klass.locate.Locate;
 import de.jpx3.intave.klass.locate.MethodSearchBySignature;
+import io.github.retrooper.packetevents.util.SpigotReflectionUtil;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 
 import java.lang.invoke.MethodHandle;
 import java.lang.invoke.MethodHandles;
+import java.lang.reflect.Constructor;
 
 public final class FriendlyByteBuf {
   public static ByteBuf from256Unpooled() {
@@ -16,7 +16,11 @@ public final class FriendlyByteBuf {
   }
 
   public static ByteBuf wrapping(ByteBuf byteBuf) {
-    return (ByteBuf) MinecraftMethods.getFriendlyBufBufConstructor().apply(byteBuf);
+    try {
+      return (ByteBuf) packetDataSerializerConstructor.newInstance(byteBuf);
+    } catch (Throwable e) {
+      throw new RuntimeException("Cannot construct PacketDataSerializer wrapping the given ByteBuf", e);
+    }
   }
 
   public static String readUtf(ByteBuf friendly, int maxLength) {
@@ -35,14 +39,24 @@ public final class FriendlyByteBuf {
   }
 
   private static final MethodHandle readUtfMethod;
+  private static final Constructor<?> packetDataSerializerConstructor;
 
   static {
+    Class<?> packetDataSerializerClass = SpigotReflectionUtil.NMS_PACKET_DATA_SERIALIZER_CLASS;
+    try {
+      Constructor<?> constructor = packetDataSerializerClass.getConstructor(ByteBuf.class);
+      constructor.setAccessible(true);
+      packetDataSerializerConstructor = constructor;
+    } catch (NoSuchMethodException e) {
+      throw new RuntimeException("Cannot find PacketDataSerializer(ByteBuf) constructor", e);
+    }
+
     MethodHandle method;
     Class<?> rfbbclassoptional = Locate.classByKey("PacketDataSerializer");
     try {
       method = MethodHandles.lookup().unreflect(rfbbclassoptional.getDeclaredMethod("readUtf", int.class));
     } catch (NoSuchMethodException e) {
-      method = MethodSearchBySignature.ofClass(MinecraftReflection.getPacketDataSerializerClass())
+      method = MethodSearchBySignature.ofClass(packetDataSerializerClass)
         .withReturnType(String.class)
         .withParameters(new Class[]{int.class})
         .search().findFirst().get();

@@ -1,19 +1,24 @@
 package de.jpx3.intave.packet;
 
-import com.comphenix.protocol.events.PacketContainer;
-import com.comphenix.protocol.reflect.EquivalentConverter;
-import com.comphenix.protocol.wrappers.EnumWrappers;
 import com.google.common.collect.Maps;
-import de.jpx3.intave.klass.Lookup;
 import de.jpx3.intave.klass.locate.Locate;
 
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.util.Arrays;
+import java.util.EnumSet;
 import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
 
+/**
+ * Teleport relative-movement flags.
+ *
+ * <p>Each constant's {@link #index()} bit matches the vanilla teleport relative-flag mask, which is
+ * exactly what PacketEvents exposes through {@code WrapperPlayServerPlayerPositionAndLook}'s
+ * {@code getRelativeMask()}/{@code setRelativeMask(byte)} and {@code RelativeFlag}. The migration
+ * therefore replaced the old ProtocolLib NMS-enum conversion with plain mask arithmetic.
+ */
 public enum Relative {
   X(0),
   Y(1),
@@ -36,64 +41,61 @@ public enum Relative {
     this.slot = slot;
   }
 
-  private int index() {
+  public int index() {
     return 1 << this.slot;
   }
 
-  private boolean matchesIndex(int var1) {
-    return (var1 & this.index()) == this.index();
+  /** Decode a vanilla teleport relative-flag mask (e.g. from {@code getRelativeMask()}). */
+  public static Set<Relative> fromMask(int mask) {
+    Set<Relative> result = EnumSet.noneOf(Relative.class);
+    for (Relative flag : values()) {
+      if ((mask & flag.index()) != 0) {
+        result.add(flag);
+      }
+    }
+    return result;
   }
 
-  private static int indexOf(Set<Relative> var0) {
-    Relative var3;
-    int var1 = 0;
-    for (Relative flag : var0) {
-      var3 = flag;
-      var1 |= var3.index();
+  /** Encode a set of flags into a vanilla teleport relative-flag mask. */
+  public static int toMask(Set<Relative> flags) {
+    int mask = 0;
+    for (Relative flag : flags) {
+      mask |= flag.index();
     }
-    return var1;
+    return mask;
   }
+
+  public static int maskOfAllFlags() {
+    return 0b11111;
+  }
+
+  public static int maskOfMovementChange() {
+    return 0b00111;
+  }
+
+  public static int maskOfNoRotationChange() {
+    return 0b11000;
+  }
+
+  // The following build native NMS teleport-flag sets via reflection (not ProtocolLib); they are used
+  // by the internal NMS teleport path in module/mitigate.
+  private static final Map<Integer, Set<?>> flagCache = Maps.newConcurrentMap();
 
   public static Set<?> nativeSetOfAllFlags() {
-    return nativeFromIndex(0b11111);
+    return nativeFromIndex(maskOfAllFlags());
   }
 
   public static Set<?> nativeSetOfMovementChange() {
-    return nativeFromIndex(0b00111);
+    return nativeFromIndex(maskOfMovementChange());
   }
 
   public static Set<?> nativeSetOfNoRotationChange() {
-    return nativeFromIndex(0b11000);
+    return nativeFromIndex(maskOfNoRotationChange());
   }
 
   public static Set<?> fromSet(Set<Relative> flags) {
-    return nativeFromIndex(indexOf(flags));
+    return nativeFromIndex(toMask(flags));
   }
-
-  private static Class<?> nativeClass = null;
-  private static EquivalentConverter<Relative> genericConverter;
-
-  public static Set<Relative> flagsFrom(PacketContainer packet) {
-    if (nativeClass == null) {
-      nativeClass = Lookup.serverClass("PacketPlayOutPosition$EnumPlayerTeleportFlags");
-    }
-    if (genericConverter == null) {
-      genericConverter = EnumWrappers.getGenericConverter(nativeClass, Relative.class);
-    }
-    return packet.getSets(genericConverter).read(0);
-  }
-
-  public static void writeFlags(PacketContainer packet, Set<Relative> flags) {
-    if (nativeClass == null) {
-      nativeClass = Lookup.serverClass("PacketPlayOutPosition$EnumPlayerTeleportFlags");
-    }
-    if (genericConverter == null) {
-      genericConverter = EnumWrappers.getGenericConverter(nativeClass, Relative.class);
-    }
-    packet.getSets(genericConverter).write(0, flags);
-  }
-
-  private static final Map<Integer, Set<?>> flagCache = Maps.newConcurrentMap();
 
   public static Set<?> nativeFromIndex(int index) {
     return flagCache.computeIfAbsent(index, integer -> {

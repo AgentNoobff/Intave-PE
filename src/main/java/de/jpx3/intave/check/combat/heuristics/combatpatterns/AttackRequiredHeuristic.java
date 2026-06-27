@@ -1,7 +1,8 @@
 package de.jpx3.intave.check.combat.heuristics.combatpatterns;
 
-import com.comphenix.protocol.events.PacketContainer;
-import com.comphenix.protocol.events.PacketEvent;
+import com.github.retrooper.packetevents.event.PacketReceiveEvent;
+import com.github.retrooper.packetevents.event.ProtocolPacketEvent;
+import com.github.retrooper.packetevents.wrapper.play.client.WrapperPlayClientHeldItemChange;
 import de.jpx3.intave.check.combat.Heuristics;
 import de.jpx3.intave.check.combat.heuristics.ClassicHeuristic;
 import de.jpx3.intave.check.combat.heuristics.HeuristicsClassicType;
@@ -33,7 +34,7 @@ public final class AttackRequiredHeuristic extends ClassicHeuristic<AttackRequir
       ARM_ANIMATION
     }
   )
-  public void receiveSwing(PacketEvent event) {
+  public void receiveSwing(ProtocolPacketEvent event) {
     Player player = event.getPlayer();
     User user = userOf(player);
     metaOf(user).didSwing = true;
@@ -59,11 +60,11 @@ public final class AttackRequiredHeuristic extends ClassicHeuristic<AttackRequir
       HELD_ITEM_SLOT_IN
     }
   )
-  public void receiveSlotSwitch(PacketEvent event) {
+  public void receiveSlotSwitch(ProtocolPacketEvent event) {
     Player player = event.getPlayer();
     AttackRequiredMeta meta = metaOf(player);
-    PacketContainer packet = event.getPacket();
-    Integer slot = packet.getIntegers().read(0);
+    WrapperPlayClientHeldItemChange packet = new WrapperPlayClientHeldItemChange((PacketReceiveEvent) event);
+    int slot = packet.getSlot();
 
     ItemStack item = player.getInventory().getItem(slot);
     if (item == null) {
@@ -78,7 +79,7 @@ public final class AttackRequiredHeuristic extends ClassicHeuristic<AttackRequir
       FLYING, LOOK, POSITION, POSITION_LOOK, VEHICLE_MOVE
     }
   )
-  public void receiveMovement(PacketEvent event) {
+  public void receiveMovement(ProtocolPacketEvent event) {
     Player player = event.getPlayer();
     User user = userOf(player);
     ProtocolMetadata clientData = user.meta().protocol();

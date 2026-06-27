@@ -1,6 +1,6 @@
 package de.jpx3.intave.module.test;
 
-import com.comphenix.protocol.events.PacketEvent;
+import com.github.retrooper.packetevents.event.ProtocolPacketEvent;
 import de.jpx3.intave.adapter.MinecraftVersions;
 import de.jpx3.intave.annotate.Nullable;
 import de.jpx3.intave.module.Module;
@@ -79,7 +79,7 @@ public final class PhysicsTestRecorder extends Module {
 		packetsOut = {PacketId.Server.ENTITY_VELOCITY}
 	)
 	public void on(
-		PacketEvent event,
+		ProtocolPacketEvent event,
 		User user, EntityVelocityReader reader
 	) {
 		Player player = user.player();

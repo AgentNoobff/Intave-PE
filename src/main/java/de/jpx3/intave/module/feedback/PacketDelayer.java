@@ -1,9 +1,10 @@
 package de.jpx3.intave.module.feedback;
 
-import com.comphenix.protocol.PacketType;
-import com.comphenix.protocol.ProtocolLibrary;
-import com.comphenix.protocol.events.PacketContainer;
-import com.comphenix.protocol.events.PacketEvent;
+import com.github.retrooper.packetevents.event.PacketSendEvent;
+import com.github.retrooper.packetevents.event.ProtocolPacketEvent;
+import com.github.retrooper.packetevents.protocol.packettype.PacketType;
+import com.github.retrooper.packetevents.protocol.packettype.PacketTypeCommon;
+import com.github.retrooper.packetevents.wrapper.PacketWrapper;
 import de.jpx3.intave.check.movement.Timer;
 import de.jpx3.intave.check.movement.physics.environment.SimulationEnvironment;
 import de.jpx3.intave.diagnostic.LatencyStudy;
@@ -13,6 +14,7 @@ import de.jpx3.intave.diagnostic.message.MessageSeverity;
 import de.jpx3.intave.module.Module;
 import de.jpx3.intave.module.linker.packet.ListenerPriority;
 import de.jpx3.intave.module.linker.packet.PacketSubscription;
+import de.jpx3.intave.packet.PacketSender;
 import de.jpx3.intave.module.tracker.player.AbilityTracker;
 import de.jpx3.intave.user.User;
 import de.jpx3.intave.user.UserRepository;
@@ -103,7 +105,7 @@ public final class PacketDelayer extends Module {
       PLAYER_INFO_REMOVE
     }
   )
-  public void enqueueOutgoingPackets(PacketEvent event) {
+  public void enqueueOutgoingPackets(ProtocolPacketEvent event) {
     Player player = event.getPlayer();
     User user = UserRepository.userOf(player);
     MetadataBundle meta = user.meta();
@@ -111,8 +113,7 @@ public final class PacketDelayer extends Module {
     ProtocolMetadata protocol = meta.protocol();
     SimulationEnvironment movement = meta.movement();
 
-    PacketContainer packetContainer = event.getPacket();
-    PacketType packetType = event.getPacketType();
+    PacketTypeCommon packetType = event.getPacketType();
 
 //    if (event.getPacketType() == PacketType.Play.Server.PLAYER_INFO) {
 ////      connection.lastRespawn = System.currentTimeMillis();
@@ -125,7 +126,7 @@ public final class PacketDelayer extends Module {
 //    }
 
     // spawn player
-//    if (packetType == PacketType.Play.Server.NAMED_ENTITY_SPAWN) {
+//    if (packetType == PacketType.Play.Server.SPAWN_PLAYER) {
 //      System.out.println("Named entity spawn packet for " + packetContainer.getUUIDs().read(0));
 //      Thread.dumpStack();
 //    }
@@ -155,15 +156,17 @@ public final class PacketDelayer extends Module {
     long positionBlockTolerance = connection.transactionPingAverage() + LatencyStudy.pingAverage() / 2 + lagTolerance + positionTimeoutTolerance;
     boolean positionTimeout = !activeExclude && lastMovementPacket > positionBlockTolerance;
 
-    boolean idAddressed = packetType == PacketType.Play.Server.ANIMATION ||
+    boolean idAddressed = packetType == PacketType.Play.Server.ENTITY_ANIMATION ||
       packetType == PacketType.Play.Server.ENTITY_STATUS ||
       packetType == PacketType.Play.Server.ENTITY_METADATA ||
       packetType == PacketType.Play.Server.ENTITY_TELEPORT ||
       packetType == PacketType.Play.Server.ENTITY_VELOCITY;
 
     if (idAddressed) {
-      Integer entityId = packetContainer.getIntegers().read(0);
-      if (entityId != null && entityId == player.getEntityId()) {
+      de.jpx3.intave.packet.reader.EntityReader reader = de.jpx3.intave.packet.reader.PacketReaders.readerOf(event);
+      int entityId = reader.entityId();
+      reader.release();
+      if (entityId == player.getEntityId()) {
         return;
       }
     }
@@ -196,7 +199,7 @@ public final class PacketDelayer extends Module {
       if (enqueuedPackets.isEmpty()) {
         connection.firstEnqueue = System.currentTimeMillis();
       }
-      enqueuedPackets.offerLast(packetContainer.getHandle());
+      enqueuedPackets.offerLast(copyOf(event));
       connection.lastBufferEnqueue = System.currentTimeMillis();
       event.setCancelled(true);
     } else if (!enqueuedPackets.isEmpty()) {
@@ -210,7 +213,7 @@ public final class PacketDelayer extends Module {
           sendPacket(player, packet);
           connection.ignorePacketEnqueue = false;
         }
-        enqueuedPackets.offerLast(packetContainer.getHandle());
+        enqueuedPackets.offerLast(copyOf(event));
         event.setCancelled(true);
       } else {
         int limit = enqueuedPacketAmount;
@@ -255,7 +258,7 @@ public final class PacketDelayer extends Module {
       long scheduledTime = System.nanoTime() + delay * 1_000_000;
       scheduledTime = Math.max(connection.lastDelaySlot + 1, scheduledTime);
       connection.lastDelaySlot = scheduledTime;
-      delayedPackets.add(new DelayedPacket(packetContainer.getHandle(), scheduledTime));
+      delayedPackets.add(new DelayedPacket(copyOf(event), scheduledTime));
       event.setCancelled(true);
       if (connection.lastDelayNotification + 30000 < System.currentTimeMillis()) {
         connection.lastDelayNotification = System.currentTimeMillis();
@@ -270,11 +273,22 @@ public final class PacketDelayer extends Module {
     }
   }
 
+  // Builds a standalone re-sendable wrapper holding a retained copy of an in-flight packet's bytes,
+  // so it can be queued and flushed later after the original send is cancelled.
+  private static PacketWrapper<?> copyOf(ProtocolPacketEvent event) {
+    PacketWrapper<?> source = new PacketWrapper<>((PacketSendEvent) event);
+    io.netty.buffer.ByteBuf buffer = (io.netty.buffer.ByteBuf) source.getBuffer();
+    io.netty.buffer.ByteBuf retained = buffer.copy(buffer.readerIndex(), buffer.readableBytes());
+    PacketWrapper<?> resend = new PacketWrapper<>(event.getPacketType());
+    resend.setBuffer(retained);
+    return resend;
+  }
+
   private void sendPacket(Player player, Object packet) {
     if (packet == null) {
       return;
     }
-    ProtocolLibrary.getProtocolManager().sendServerPacket(player, PacketContainer.fromPacket(packet), true);
+    PacketSender.sendServerPacketWithoutEvent(player, (PacketWrapper<?>) packet);
   }
 
   private long oldestPendingTransaction(User user) {

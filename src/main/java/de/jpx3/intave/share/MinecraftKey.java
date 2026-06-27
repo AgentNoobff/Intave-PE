@@ -37,14 +37,14 @@ public final class MinecraftKey {
 	}
 
   public static @Nullable MinecraftKey fromProtocolLib(
-    @Nullable com.comphenix.protocol.wrappers.MinecraftKey protocolLibKey
+    @Nullable com.github.retrooper.packetevents.resources.ResourceLocation resourceLocation
   ) {
-    if (protocolLibKey == null) {
+    if (resourceLocation == null) {
       return null;
     }
     return new MinecraftKey(
-      protocolLibKey.getPrefix(),
-      protocolLibKey.getKey()
+      resourceLocation.getNamespace(),
+      resourceLocation.getKey()
     );
   }
 

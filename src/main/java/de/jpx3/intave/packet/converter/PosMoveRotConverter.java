@@ -1,13 +1,19 @@
 package de.jpx3.intave.packet.converter;
 
-import com.comphenix.protocol.reflect.EquivalentConverter;
 import de.jpx3.intave.codec.CodecTranslator;
 import de.jpx3.intave.codec.StreamCodec;
 import de.jpx3.intave.share.PositionMoveRotation;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 
-public final class PosMoveRotConverter implements EquivalentConverter<PositionMoveRotation> {
+/**
+ * Translates between Intave's {@link PositionMoveRotation} and the native NMS
+ * {@code PositionMoveRotation} record by round-tripping through a {@link ByteBuf} with the matching
+ * stream codecs. The {@code getGeneric}/{@code getSpecific}/{@code getSpecificType} surface mirrors the
+ * former ProtocolLib {@code EquivalentConverter} contract so the (separately migrated) packet readers
+ * and the teleport applier can keep calling it unchanged.
+ */
+public final class PosMoveRotConverter {
   public static final PosMoveRotConverter INSTANCE = new PosMoveRotConverter();
   private static final ThreadLocal<ByteBuf> caches = ThreadLocal.withInitial(Unpooled::buffer);
   public static final Class<?> nativePositionMoveRotClass = positionMoveRotationClass();
@@ -17,7 +23,6 @@ public final class PosMoveRotConverter implements EquivalentConverter<PositionMo
 
   private PosMoveRotConverter() {}
 
-  @Override
   public Object getGeneric(PositionMoveRotation specific) {
     ByteBuf medium = caches.get();
     intaveCodec.encode(medium, specific);
@@ -26,7 +31,6 @@ public final class PosMoveRotConverter implements EquivalentConverter<PositionMo
     return decode;
   }
 
-  @Override
   public PositionMoveRotation getSpecific(Object generic) {
     ByteBuf medium = caches.get();
     nativeCodec.encode(medium, generic);
@@ -43,7 +47,6 @@ public final class PosMoveRotConverter implements EquivalentConverter<PositionMo
     }
   }
 
-  @Override
   public Class<PositionMoveRotation> getSpecificType() {
     return PositionMoveRotation.class;
   }

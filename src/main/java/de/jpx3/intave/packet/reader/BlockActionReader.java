@@ -1,22 +1,35 @@
 package de.jpx3.intave.packet.reader;
 
-import com.comphenix.protocol.wrappers.BlockPosition;
+import com.github.retrooper.packetevents.event.PacketSendEvent;
+import com.github.retrooper.packetevents.util.Vector3i;
+import com.github.retrooper.packetevents.wrapper.play.server.WrapperPlayServerBlockAction;
+import io.github.retrooper.packetevents.util.SpigotConversionUtil;
 import org.bukkit.Material;
 
 public final class BlockActionReader extends AbstractPacketReader {
-  public BlockPosition blockPosition() {
-    return packet().getBlockPositionModifier().read(0);
+  private WrapperPlayServerBlockAction wrapper() {
+    return new WrapperPlayServerBlockAction((PacketSendEvent) event());
+  }
+
+  public Vector3i blockPosition() {
+    return wrapper().getBlockPosition();
   }
 
   public Material blockType() {
-    return packet().getBlocks().read(0);
+    try {
+      return SpigotConversionUtil.toBukkitBlockData(wrapper().getBlockType()).getMaterial();
+    } catch (Throwable throwable) {
+      // TODO(pe-migration): legacy (pre-1.13) servers have no Bukkit BlockData; resolve the block
+      // type via material-data if a caller relies on this below 1.13.
+      return Material.AIR;
+    }
   }
 
   public int action() {
-    return packet().getIntegers().read(0);
+    return wrapper().getActionId();
   }
 
   public int data() {
-    return packet().getIntegers().read(1);
+    return wrapper().getActionData();
   }
 }

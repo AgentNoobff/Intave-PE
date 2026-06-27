@@ -1,11 +1,11 @@
 package de.jpx3.intave.command.stages;
 
-import com.comphenix.protocol.PacketType;
-import com.comphenix.protocol.ProtocolLibrary;
-import com.comphenix.protocol.ProtocolManager;
-import com.comphenix.protocol.events.PacketAdapter;
-import com.comphenix.protocol.events.PacketEvent;
-import com.comphenix.protocol.injector.PacketFilterManager;
+import com.github.retrooper.packetevents.PacketEvents;
+import com.github.retrooper.packetevents.event.PacketListenerAbstract;
+import com.github.retrooper.packetevents.event.PacketListenerCommon;
+import com.github.retrooper.packetevents.event.PacketListenerPriority;
+import com.github.retrooper.packetevents.event.PacketSendEvent;
+import com.github.retrooper.packetevents.protocol.packettype.PacketType;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import de.jpx3.intave.IntavePlugin;
@@ -83,7 +83,7 @@ public final class DiagnosticsStage extends CommandStage {
   private static DiagnosticsStage singletonInstance;
   private final IntavePlugin plugin;
 
-  private final Map<UUID, PacketAdapter> adapterMap = GarbageCollector.watch(new HashMap<>());
+  private final Map<UUID, PacketListenerCommon> adapterMap = GarbageCollector.watch(new HashMap<>());
 
   //  private final Set<UUID> damageDebug = GarbageCollector.watch(new HashSet<>());
 
@@ -118,14 +118,14 @@ public final class DiagnosticsStage extends CommandStage {
     }
     String intaveVersion = IntavePlugin.fullVersion();
     String serverVersion = Bukkit.getName() + "@" + Bukkit.getVersion();
-    String protocolLibVersion = ProtocolLibrary.getPlugin().getDescription().getVersion();
+    String packetEventsVersion = PacketEvents.getAPI().getVersion().toString();
     sender.sendMessage(ChatColor.GRAY + "Spigot is " + ChatColor.WHITE + serverVersion);
-    sender.sendMessage(ChatColor.GRAY + "ProtocolLib is " + ChatColor.WHITE + protocolLibVersion);
+    sender.sendMessage(ChatColor.GRAY + "PacketEvents is " + ChatColor.WHITE + packetEventsVersion);
     sender.sendMessage(ChatColor.GRAY + "Intave is " + ChatColor.WHITE + intaveVersion);
 
     TextComponent message = new TextComponent("[Copy report message to chat]");
     message.setColor(net.md_5.bungee.api.ChatColor.GRAY);
-    message.setClickEvent(new ClickEvent(ClickEvent.Action.SUGGEST_COMMAND, "Environment: `" + playerVersion + "`,`" + serverVersion + "`,`" + protocolLibVersion + "`,`" + intaveVersion + "`"));
+    message.setClickEvent(new ClickEvent(ClickEvent.Action.SUGGEST_COMMAND, "Environment: `" + playerVersion + "`,`" + serverVersion + "`,`" + packetEventsVersion + "`,`" + intaveVersion + "`"));
 
     if (player != null) {
       // Send the message to the player
@@ -344,15 +344,10 @@ public final class DiagnosticsStage extends CommandStage {
   public void attackTraceCommand(User user) {
     try {
       Player player = user.player();
-      ProtocolManager protocolManager = ProtocolLibrary.getProtocolManager();
-      PacketFilterManager packetFilterManager = (PacketFilterManager) protocolManager;
-      Field inboundListeners = null;
-      try {
-        inboundListeners = packetFilterManager.getClass().getDeclaredField("inboundListeners");
-        inboundListeners.setAccessible(true);
-      } catch (NoSuchFieldException e) {
-        throw new RuntimeException(e);
-      }
+      // TODO(pe-migration): this debug command poked ProtocolLib's internal inbound-listener list to
+      // replay a synthetic attack through every listener. PacketEvents exposes no equivalent internal
+      // listener registry, so the trace is unavailable.
+      user.player().sendMessage(IntavePlugin.prefix() + ChatColor.RED + "Attack trace is unavailable on PacketEvents");
 //      SortedPacketListenerList sortedPacketListenerList;
 //      try {
 //        sortedPacketListenerList = (SortedPacketListenerList) inboundListeners.get(packetFilterManager);
@@ -663,30 +658,32 @@ public final class DiagnosticsStage extends CommandStage {
     UUID userId = player.getUniqueId();
 
     player.sendMessage(ChatColor.RED + "You will need to wait one minute to get feedback again.");
-    PacketAdapter adapter = new PacketAdapter(IntavePlugin.singletonInstance(), PacketType.Play.Server.TRANSACTION, PacketType.Play.Server.PING) {
+    PacketListenerAbstract adapter = new PacketListenerAbstract(PacketListenerPriority.MONITOR) {
       final long timeout = System.currentTimeMillis() + 60000;
 
       @Override
-      public void onPacketSending(PacketEvent event) {
+      public void onPacketSend(PacketSendEvent event) {
+        if (event.getPacketType() != PacketType.Play.Server.WINDOW_CONFIRMATION
+          && event.getPacketType() != PacketType.Play.Server.PING) {
+          return;
+        }
         if (System.currentTimeMillis() > timeout) {
-          ProtocolLibrary.getProtocolManager().removePacketListener(this);
+          PacketEvents.getAPI().getEventManager().unregisterListener(this);
           adapterMap.remove(userId);
 
           Player blayer = Bukkit.getPlayer(userId);
-          if (blayer.isOnline()) {
+          if (blayer != null && blayer.isOnline()) {
             blayer.sendMessage(IntavePlugin.prefix() + ChatColor.GREEN + "You can now get feedback again.");
           }
           return;
         }
-        event.setCancelled(true);
-      }
-
-      @Override
-      public void onPacketReceiving(PacketEvent event) {
+        if (player.getUniqueId().equals(userId)) {
+          event.setCancelled(true);
+        }
       }
     };
     adapterMap.put(userId, adapter);
-    ProtocolLibrary.getProtocolManager().addPacketListener(adapter);
+    PacketEvents.getAPI().getEventManager().registerListener(adapter);
   }
 
   @SubCommand(
@@ -778,7 +775,7 @@ public final class DiagnosticsStage extends CommandStage {
       printStream.println("Static environment");
       printStream.println(" Time: " + LocalDateTime.now().format(MESSAGE_DATE_FORMATTER));
       printStream.println(" Intave: " + IntavePlugin.fullVersion());
-      printStream.println(" ProtocolLib: " + Bukkit.getPluginManager().getPlugin("ProtocolLib").getDescription().getVersion());
+      printStream.println(" PacketEvents: " + Bukkit.getPluginManager().getPlugin("packetevents").getDescription().getVersion());
       if (Bukkit.getPluginManager().getPlugin("ViaVersion") != null) {
         printStream.println(" ViaVersion: " + Bukkit.getPluginManager().getPlugin("ViaVersion").getDescription().getVersion());
       } else {

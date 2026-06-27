@@ -1,7 +1,8 @@
 package de.jpx3.intave.module.tracker.player;
 
-import com.comphenix.protocol.events.PacketContainer;
-import com.comphenix.protocol.events.PacketEvent;
+import com.github.retrooper.packetevents.event.PacketReceiveEvent;
+import com.github.retrooper.packetevents.event.ProtocolPacketEvent;
+import com.github.retrooper.packetevents.wrapper.play.client.WrapperPlayClientSettings;
 import de.jpx3.intave.adapter.MinecraftVersions;
 import de.jpx3.intave.module.Module;
 import de.jpx3.intave.module.linker.packet.PacketSubscription;
@@ -20,16 +21,15 @@ public final class SettingsTracker extends Module {
       SETTINGS
     }
   )
-  public void receiveClientOptions(PacketEvent event) {
+  public void receiveClientOptions(ProtocolPacketEvent event) {
     Player player = event.getPlayer();
     User user = userOf(player);
-    PacketContainer packet = event.getPacket();
     ProtocolMetadata clientData = user.meta().protocol();
     if (MinecraftVersions.VER1_20_2.atOrAbove()) {
       clientData.setLocale("en_US");
       return;
     }
-    String locale = packet.getStrings().read(0);
+    String locale = new WrapperPlayClientSettings((PacketReceiveEvent) event).getLocale();
     clientData.setLocale(locale);
   }
 

@@ -1,8 +1,9 @@
 package de.jpx3.intave.check.world.placementanalysis;
 
-import com.comphenix.protocol.events.PacketContainer;
-import com.comphenix.protocol.events.PacketEvent;
-import com.comphenix.protocol.reflect.StructureModifier;
+import com.github.retrooper.packetevents.event.PacketReceiveEvent;
+import com.github.retrooper.packetevents.event.ProtocolPacketEvent;
+import com.github.retrooper.packetevents.util.Vector3f;
+import com.github.retrooper.packetevents.wrapper.play.client.WrapperPlayClientPlayerBlockPlacement;
 import de.jpx3.intave.check.CheckPart;
 import de.jpx3.intave.check.world.PlacementAnalysis;
 import de.jpx3.intave.module.Modules;
@@ -29,19 +30,19 @@ public final class Facing extends CheckPart<PlacementAnalysis> {
 			BLOCK_PLACE
 		}
 	)
-	public void checkPlacementVector(PacketEvent event) {
+	public void checkPlacementVector(ProtocolPacketEvent event) {
 		Player player = event.getPlayer();
-		PacketContainer packet = event.getPacket();
+		WrapperPlayClientPlayerBlockPlacement packet = new WrapperPlayClientPlayerBlockPlacement((PacketReceiveEvent) event);
 		if (blockingPlacementPacket(packet)) {
 			return;
 		}
-		StructureModifier<Float> floatStructureModifier = packet.getFloat();
-		if (floatStructureModifier.size() < 3) {
+		Vector3f cursor = packet.getCursorPosition();
+		if (cursor == null) {
 			return;
 		}
-		float f1 = floatStructureModifier.read(0);
-		float f2 = floatStructureModifier.read(1);
-		float f3 = floatStructureModifier.read(2);
+		float f1 = cursor.getX();
+		float f2 = cursor.getY();
+		float f3 = cursor.getZ();
 		if (f1 < 0 || f2 < 0 || f3 < 0 || f1 > 1 || f2 > 1 || f3 > 1) {
 			Violation violation = Violation.builderFor(PlacementAnalysis.class)
 				.forPlayer(player).withMessage(COMMON_FLAG_MESSAGE)
@@ -54,9 +55,8 @@ public final class Facing extends CheckPart<PlacementAnalysis> {
 		}
 	}
 
-	private boolean blockingPlacementPacket(PacketContainer packet) {
-		Integer integer = packet.getIntegers().readSafely(0);
-		return integer != null && integer == 255;
+	private boolean blockingPlacementPacket(WrapperPlayClientPlayerBlockPlacement packet) {
+		return packet.getFaceId() == 255;
 	}
 
 	@BukkitEventSubscription(

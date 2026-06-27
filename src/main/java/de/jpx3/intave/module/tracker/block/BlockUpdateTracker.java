@@ -1,11 +1,17 @@
 package de.jpx3.intave.module.tracker.block;
 
-import com.comphenix.protocol.PacketType;
-import com.comphenix.protocol.events.PacketContainer;
-import com.comphenix.protocol.events.PacketEvent;
-import com.comphenix.protocol.wrappers.BlockPosition;
-import com.comphenix.protocol.wrappers.EnumWrappers;
-import com.comphenix.protocol.wrappers.WrappedBlockData;
+import com.github.retrooper.packetevents.event.CancellableEvent;
+import com.github.retrooper.packetevents.event.PacketReceiveEvent;
+import com.github.retrooper.packetevents.event.PacketSendEvent;
+import com.github.retrooper.packetevents.event.ProtocolPacketEvent;
+import com.github.retrooper.packetevents.protocol.packettype.PacketType;
+import com.github.retrooper.packetevents.protocol.packettype.PacketTypeCommon;
+import com.github.retrooper.packetevents.protocol.player.DiggingAction;
+import com.github.retrooper.packetevents.protocol.world.states.WrappedBlockState;
+import com.github.retrooper.packetevents.util.Vector3i;
+import com.github.retrooper.packetevents.wrapper.play.client.WrapperPlayClientPlayerDigging;
+import com.github.retrooper.packetevents.wrapper.play.server.WrapperPlayServerAcknowledgeBlockChanges;
+import io.github.retrooper.packetevents.util.SpigotConversionUtil;
 import de.jpx3.intave.block.cache.BlockCache;
 import de.jpx3.intave.block.variant.BlockVariantNativeAccess;
 import de.jpx3.intave.check.movement.physics.environment.SimulationEnvironment;
@@ -23,14 +29,12 @@ import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.World;
 import org.bukkit.entity.Player;
-import org.bukkit.event.Cancellable;
 import org.bukkit.util.NumberConversions;
 import org.bukkit.util.Vector;
 
 import java.util.Collection;
 import java.util.List;
 
-import static com.comphenix.protocol.wrappers.EnumWrappers.PlayerDigType.*;
 import static de.jpx3.intave.check.movement.physics.MoveMetric.NEARBY_COLLISION_INACCURACY;
 import static de.jpx3.intave.module.feedback.FeedbackOptions.*;
 import static de.jpx3.intave.module.linker.packet.PacketId.Client.*;
@@ -50,6 +54,10 @@ public final class BlockUpdateTracker extends Module {
     int[] zCoordinates = coordinates.zCoordinates();
     if (xCoordinates.length != zCoordinates.length) {
       throw new IllegalStateException();
+    }
+    // MAP_CHUNK_BULK has no PacketEvents wrapper (1.8 only); its coordinate arrays are empty.
+    if (xCoordinates.length == 0) {
+      return;
     }
     if (xCoordinates.length > 1) {
       user.tickFeedback(
@@ -90,17 +98,17 @@ public final class BlockUpdateTracker extends Module {
     }
   )
   public void checkInteractionTarget(
-    User user, PacketContainer packet,
-    BlockPositionReader reader, Cancellable cancellable
+    User user, ProtocolPacketEvent event,
+    BlockPositionReader reader, CancellableEvent cancellable
   ) {
-    PacketType packetType = packet.getType();
+    PacketTypeCommon packetType = event.getPacketType();
     boolean check = true;
 
-    if (packetType == PacketType.Play.Client.BLOCK_DIG) {
-      EnumWrappers.PlayerDigType playerDigType = packet.getPlayerDigTypes().read(0);
-      check = playerDigType == START_DESTROY_BLOCK || playerDigType == STOP_DESTROY_BLOCK || playerDigType == ABORT_DESTROY_BLOCK;
-    } else if (packetType == PacketType.Play.Client.BLOCK_PLACE) {
-      BlockPosition blockPosition = reader.blockPosition();
+    if (packetType == PacketType.Play.Client.PLAYER_DIGGING) {
+      DiggingAction action = new WrapperPlayClientPlayerDigging((PacketReceiveEvent) event).getAction();
+      check = action == DiggingAction.START_DIGGING || action == DiggingAction.FINISHED_DIGGING || action == DiggingAction.CANCELLED_DIGGING;
+    } else if (packetType == PacketType.Play.Client.PLAYER_BLOCK_PLACEMENT) {
+      Vector3i blockPosition = reader.blockPosition();
       if (blockPosition == null) {
         return;
       }
@@ -112,11 +120,11 @@ public final class BlockUpdateTracker extends Module {
 
     if (check) {
       SimulationEnvironment movementData = user.meta().movement();
-      BlockPosition blockPosition = reader.blockPosition();
+      Vector3i blockPosition = reader.blockPosition();
       if (blockPosition == null) {
         return;
       }
-      Vector targetBlock = blockPosition.toVector();
+      Vector targetBlock = new Vector(blockPosition.getX(), blockPosition.getY(), blockPosition.getZ());
       Vector playerLocation = new Vector(movementData.lastPositionX(), movementData.lastPositionY(), movementData.lastPositionZ());
       if (playerLocation.distance(targetBlock) > 16) {
         cancellable.setCancelled(true);
@@ -129,17 +137,15 @@ public final class BlockUpdateTracker extends Module {
       BLOCK_BREAK, BLOCK_CHANGE, MULTI_BLOCK_CHANGE
     }
   )
-  public void sentBlockUpdate(PacketEvent event) {
+  public void sentBlockUpdate(ProtocolPacketEvent event) {
     Player player = event.getPlayer();
     User user = UserRepository.userOf(player);
     boolean speculativeBlocks = user.meta().protocol().clientSpeculativeBlocks();
     PendingCountingFeedbackObserver pendingBlockUpdates = user.meta().connection().pendingBlockUpdates;
 
-    PacketContainer packet = event.getPacket();
-
-    BlockChanges changes = PacketReaders.readerOf(packet);
-    List<BlockPosition> blockPositions = changes.blockPositions();
-    List<WrappedBlockData> blockDataList = changes.blockDataList();
+    BlockChanges changes = PacketReaders.readerOf(event);
+    List<Vector3i> blockPositions = changes.blockPositions();
+    List<WrappedBlockState> blockDataList = changes.blockDataList();
     changes.release();
 
     World world = player.getWorld();
@@ -147,12 +153,12 @@ public final class BlockUpdateTracker extends Module {
       BlockCache blockCache = user.blockCache();
       Location verifiedLocation = user.meta().movement().verifiedLocation();
       for (int i = 0; i < blockPositions.size(); i++) {
-        BlockPosition blockPosition = blockPositions.get(i);
-        WrappedBlockData blockData = blockDataList.get(i);
+        Vector3i blockPosition = blockPositions.get(i);
+        WrappedBlockState blockData = blockDataList.get(i);
         if (distance(verifiedLocation, blockPosition) < 2) {
           user.meta().movement().activeTick(NEARBY_COLLISION_INACCURACY);
         }
-        Material material = blockData.getType();
+        Material material = materialOf(blockData);
         int variant = BlockVariantNativeAccess.variantAccess(blockData);
         int positionX = blockPosition.getX();
         int positionY = blockPosition.getY();
@@ -176,22 +182,32 @@ public final class BlockUpdateTracker extends Module {
     }
   }
 
+  private static Material materialOf(WrappedBlockState blockData) {
+    try {
+      return SpigotConversionUtil.toBukkitBlockData(blockData).getMaterial();
+    } catch (Throwable legacyOrUnsupported) {
+      // Pre-1.13 has no Bukkit BlockData; fall back to matching the block-state type name.
+      Material material = Material.matchMaterial(blockData.getType().getName().toUpperCase());
+      return material != null ? material : Material.AIR;
+    }
+  }
+
   @PacketSubscription(
     packetsOut = {
       BLOCK_CHANGED_ACK
     }
   )
-  public void blockChangedAck(PacketEvent event) {
+  public void blockChangedAck(ProtocolPacketEvent event) {
     Player player = event.getPlayer();
     User user = UserRepository.userOf(player);
-    int sequenceNumber = event.getPacket().getIntegers().read(0);
+    int sequenceNumber = new WrapperPlayServerAcknowledgeBlockChanges((PacketSendEvent) event).getSequence();
     user.packetTickFeedback(event, () ->
       user.blockCache().moveClientSpeculationsToOverride(player.getWorld(), sequenceNumber)
     );
   }
 
-  private static boolean inDistance(Collection<? extends BlockPosition> blockPositions, Location playerLocation, int requiredDistance) {
-    for (BlockPosition blockPosition : blockPositions) {
+  private static boolean inDistance(Collection<? extends Vector3i> blockPositions, Location playerLocation, int requiredDistance) {
+    for (Vector3i blockPosition : blockPositions) {
       if (distance(playerLocation, blockPosition) < requiredDistance) {
         return true;
       }
@@ -199,7 +215,7 @@ public final class BlockUpdateTracker extends Module {
     return false;
   }
 
-  private static double distance(Location playerLocation, BlockPosition blockPosition) {
+  private static double distance(Location playerLocation, Vector3i blockPosition) {
     return Math.sqrt(
       NumberConversions.square(playerLocation.getBlockX() - blockPosition.getX()) +
         NumberConversions.square(playerLocation.getBlockY() - blockPosition.getY()) +

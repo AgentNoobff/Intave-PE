@@ -16,13 +16,12 @@ final class ModuleLoader {
   public void setup() {
     ModuleSettings eventBoot = ModuleSettings.builder().doNotLinkSubscriptions().bootBeforeIntave().build();
     ModuleSettings packetBoot = ModuleSettings.builder()
-      .doNotLinkSubscriptions().requireProtocolLib()
+      .doNotLinkSubscriptions().requirePacketEvents()
       .andRequire(Requirements.intaveEnabled())
       .bootAt(BootSegment.STAGE_6)
       .build();
-    ModuleSettings defaultBoot = ModuleSettings.builder().requireProtocolLib().bootUsually().build();
-//    ModuleSettings defaultBootRequireProto4 = ModuleSettings.builder().requireProtocolLib4().bootUsually().build();
-    ModuleSettings lateBoot = ModuleSettings.builder().requireProtocolLib().bootAfterIntave().build();
+    ModuleSettings defaultBoot = ModuleSettings.builder().requirePacketEvents().bootUsually().build();
+    ModuleSettings lateBoot = ModuleSettings.builder().requirePacketEvents().bootAfterIntave().build();
 
     // linker
     prepareModule("de.jpx3.intave.module.linker.bukkit.BukkitEventSubscriptionLinker", eventBoot);

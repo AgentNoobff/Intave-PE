@@ -1,9 +1,13 @@
 package de.jpx3.intave.check.combat.heuristics.other;
 
-import com.comphenix.protocol.PacketType;
-import com.comphenix.protocol.events.PacketContainer;
-import com.comphenix.protocol.events.PacketEvent;
-import com.comphenix.protocol.wrappers.EnumWrappers;
+import com.github.retrooper.packetevents.event.PacketReceiveEvent;
+import com.github.retrooper.packetevents.event.ProtocolPacketEvent;
+import com.github.retrooper.packetevents.protocol.item.ItemStack;
+import com.github.retrooper.packetevents.protocol.packettype.PacketType;
+import com.github.retrooper.packetevents.protocol.player.DiggingAction;
+import com.github.retrooper.packetevents.wrapper.PacketWrapper;
+import com.github.retrooper.packetevents.wrapper.play.client.WrapperPlayClientPlayerBlockPlacement;
+import com.github.retrooper.packetevents.wrapper.play.client.WrapperPlayClientPlayerDigging;
 import de.jpx3.intave.check.combat.Heuristics;
 import de.jpx3.intave.check.combat.heuristics.ClassicHeuristic;
 import de.jpx3.intave.check.combat.heuristics.HeuristicsClassicType;
@@ -19,7 +23,6 @@ import de.jpx3.intave.user.meta.CheckCustomMetadata;
 import de.jpx3.intave.user.meta.ProtocolMetadata;
 import de.jpx3.intave.user.meta.PunishmentMetadata;
 import org.bukkit.entity.Player;
-import org.bukkit.inventory.ItemStack;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -39,7 +42,7 @@ public final class BlockingHeuristic extends ClassicHeuristic<BlockingHeuristic.
       ARM_ANIMATION, FLYING, LOOK, POSITION, POSITION_LOOK
     }
   )
-  public void receiveMovementAndSwingPacket(PacketEvent event) {
+  public void receiveMovementAndSwingPacket(ProtocolPacketEvent event) {
     Player player = event.getPlayer();
     User user = userOf(player);
     BlockingMeta meta = metaOf(user);
@@ -49,7 +52,7 @@ public final class BlockingHeuristic extends ClassicHeuristic<BlockingHeuristic.
       return;
     }
 
-    if (event.getPacketType() != PacketType.Play.Client.ARM_ANIMATION) {
+    if (event.getPacketType() != PacketType.Play.Client.ANIMATION) {
       meta.releasedItemAfterClientTick = false;
       meta.ticksBetweenBlockAndUnblock++;
     }
@@ -59,7 +62,7 @@ public final class BlockingHeuristic extends ClassicHeuristic<BlockingHeuristic.
     meta.heldItemOperations = 0;
   }
 
-  private void receiveExcludedPacket(Player player, PacketContainer packet) {
+  private void receiveExcludedPacket(Player player, PacketWrapper<?> packet) {
     userOf(player).ignoreNextInboundPacket();
     PacketSender.receiveClientPacketFrom(player, packet);
   }
@@ -69,20 +72,20 @@ public final class BlockingHeuristic extends ClassicHeuristic<BlockingHeuristic.
       BLOCK_PLACE, BLOCK_DIG
     }
   )
-  public void receiveInteractionPacket(PacketEvent event) {
+  public void receiveInteractionPacket(ProtocolPacketEvent event) {
     Player player = event.getPlayer();
     User user = userOf(player);
     PunishmentMetadata punishmentData = user.meta().punishment();
     BlockingMeta meta = metaOf(user);
-    PacketContainer packet = event.getPacket();
 
     if (!user.meta().protocol().flyingPacketsAreSent() || user.meta().abilities().ignoringMovementPackets() || user.meta().movement().ticksPast(TELEPORT) < 10) {
       return;
     }
 
-    if (packet.getType() == PacketType.Play.Client.BLOCK_DIG) {
-      EnumWrappers.PlayerDigType playerDigType = packet.getPlayerDigTypes().readSafely(0);
-      if (playerDigType == EnumWrappers.PlayerDigType.RELEASE_USE_ITEM) {
+    if (event.getPacketType() == PacketType.Play.Client.PLAYER_DIGGING) {
+      WrapperPlayClientPlayerDigging digging = new WrapperPlayClientPlayerDigging((PacketReceiveEvent) event);
+      DiggingAction playerDigType = digging.getAction();
+      if (playerDigType == DiggingAction.RELEASE_USE_ITEM) {
         meta.releasedItemAfterClientTick = true;
         meta.ventosFreundlicherBoolean = true;
 
@@ -98,20 +101,19 @@ public final class BlockingHeuristic extends ClassicHeuristic<BlockingHeuristic.
 
       }
     } else { // BLOCK_PLACE
-      ItemStack itemInHand = packet.getItemModifier().readSafely(0);
-      boolean sword = itemInHand != null && itemInHand.getType().name().endsWith("_SWORD");
+      WrapperPlayClientPlayerBlockPlacement placement = new WrapperPlayClientPlayerBlockPlacement((PacketReceiveEvent) event);
+      ItemStack itemInHand = placement.getItemStack().orElse(null);
+      boolean sword = itemInHand != null && !itemInHand.isEmpty()
+        && itemInHand.getType().getName().getKey().toLowerCase().endsWith("_sword");
 
       if (meta.releasedItemAfterClientTick) {
-        String description = "sent multiple blocking interactions per tick (" + (itemInHand == null ? "null" : itemInHand.getType()) + ")";
+        String description = "sent multiple blocking interactions per tick (" + (itemInHand == null ? "null" : itemInHand.getType().getName().getKey()) + ")";
         flag(player, description);
         user.nerf(AttackNerfStrategy.BLOCKING, "block:multiple");
       }
 
       int clientTicksBetweenBlockingToggle = meta.clientTicksBetweenBlockingToggle;
-      Integer integer = packet.getIntegers().readSafely(0);
-      if (integer == null) {
-        integer = 0;
-      }
+      int integer = placement.getFaceId();
       if (integer == 255 && meta.ventosFreundlicherBoolean && sword) {
         meta.clientTicksBetweenBlockingToggle = 0;
         meta.ventosFreundlicherBoolean = false;
@@ -140,7 +142,7 @@ public final class BlockingHeuristic extends ClassicHeuristic<BlockingHeuristic.
       FLYING, POSITION, POSITION_LOOK, LOOK, VEHICLE_MOVE
     }
   )
-  public void receiveMovementPacket(PacketEvent event) {
+  public void receiveMovementPacket(ProtocolPacketEvent event) {
     Player player = event.getPlayer();
     User user = userOf(player);
     BlockingMeta meta = metaOf(user);
@@ -175,7 +177,7 @@ public final class BlockingHeuristic extends ClassicHeuristic<BlockingHeuristic.
       USE_ITEM
     }
   )
-  public void receiveUseItem(PacketEvent event) {
+  public void receiveUseItem(ProtocolPacketEvent event) {
     Player player = event.getPlayer();
     User user = userOf(player);
     ProtocolMetadata clientData = user.meta().protocol();
@@ -191,7 +193,7 @@ public final class BlockingHeuristic extends ClassicHeuristic<BlockingHeuristic.
       BLOCK_PLACE
     }
   )
-  public void receiveBlockPlace(PacketEvent event) {
+  public void receiveBlockPlace(ProtocolPacketEvent event) {
     Player player = event.getPlayer();
     User user = userOf(player);
     BlockingMeta meta = metaOf(player);
@@ -207,7 +209,7 @@ public final class BlockingHeuristic extends ClassicHeuristic<BlockingHeuristic.
       HELD_ITEM_SLOT_IN
     }
   )
-  public void receiveHeldItemSlot(PacketEvent event) {
+  public void receiveHeldItemSlot(ProtocolPacketEvent event) {
     Player player = event.getPlayer();
     User user = userOf(player);
     BlockingMeta meta = metaOf(player);
@@ -228,7 +230,7 @@ public final class BlockingHeuristic extends ClassicHeuristic<BlockingHeuristic.
   }
 
   public static final class BlockingMeta extends CheckCustomMetadata {
-    private final List<PacketContainer> unsendPackets = new ArrayList<>();
+    private final List<PacketWrapper<?>> unsendPackets = new ArrayList<>();
     private int blocksPlacedThisTick;
     public boolean releasedItemAfterClientTick;
     public int ticksBetweenBlockAndUnblock, clientTicksBetweenBlockingToggle;

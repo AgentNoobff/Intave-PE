@@ -1,6 +1,7 @@
 package de.jpx3.intave.block.variant;
 
-import com.comphenix.protocol.wrappers.WrappedBlockData;
+import com.github.retrooper.packetevents.protocol.world.states.WrappedBlockState;
+import io.github.retrooper.packetevents.util.SpigotConversionUtil;
 import de.jpx3.intave.adapter.MinecraftVersions;
 import de.jpx3.intave.block.access.BlockAccess;
 import de.jpx3.intave.block.access.VolatileBlockAccess;
@@ -25,12 +26,20 @@ public final class BlockVariantNativeAccess {
     return BlockAccess.global().variantIndexOf(block);
   }
 
-  public static int variantAccess(WrappedBlockData blockData) {
+  public static int variantAccess(WrappedBlockState blockData) {
     if (!MODERN_MATERIAL_PROCESSING) {
-      return blockData.getData();
+      // Pre-1.13 the variant is the block-state metadata, which is the low nibble of the legacy id.
+      return blockData.getGlobalId() & 0xF;
     }
-    Material type = blockData.getType();
-    Object handle = blockData.getHandle();
+    org.bukkit.block.data.BlockData bukkitBlockData = SpigotConversionUtil.toBukkitBlockData(blockData);
+    Material type = bukkitBlockData.getMaterial();
+    Object handle;
+    try {
+      // CraftBlockData#getState() returns the native IBlockData handle the variant register keys on.
+      handle = bukkitBlockData.getClass().getMethod("getState").invoke(bukkitBlockData);
+    } catch (Exception exception) {
+      throw new IllegalStateException("Unable to resolve native block data for " + type, exception);
+    }
     int index = BlockVariantRegister.variantIndexOf(type, handle);
     if (index < 0) {
       throw new IllegalStateException("Invalid block data update: " + type + "/" + handle);

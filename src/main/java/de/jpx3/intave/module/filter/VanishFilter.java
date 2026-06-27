@@ -1,10 +1,11 @@
 package de.jpx3.intave.module.filter;
 
-import com.comphenix.protocol.events.PacketContainer;
-import com.comphenix.protocol.events.PacketEvent;
-import com.comphenix.protocol.wrappers.EnumWrappers;
-import com.comphenix.protocol.wrappers.PlayerInfoData;
-import com.comphenix.protocol.wrappers.WrappedGameProfile;
+import com.github.retrooper.packetevents.event.PacketSendEvent;
+import com.github.retrooper.packetevents.event.ProtocolPacketEvent;
+import com.github.retrooper.packetevents.protocol.packettype.PacketType;
+import com.github.retrooper.packetevents.wrapper.play.server.WrapperPlayServerPlayerInfo;
+import com.github.retrooper.packetevents.wrapper.play.server.WrapperPlayServerPlayerInfoUpdate;
+import com.github.retrooper.packetevents.wrapper.play.server.WrapperPlayServerTabComplete;
 import com.google.common.collect.Lists;
 import de.jpx3.intave.IntavePlugin;
 import de.jpx3.intave.executor.Synchronizer;
@@ -12,7 +13,6 @@ import de.jpx3.intave.module.linker.packet.ListenerPriority;
 import de.jpx3.intave.module.linker.packet.PacketSubscription;
 import de.jpx3.intave.module.linker.packet.PrioritySlot;
 import de.jpx3.intave.packet.reader.PacketReaders;
-import de.jpx3.intave.packet.reader.PlayerInfoReader;
 import de.jpx3.intave.packet.reader.PlayerInfoRemoveReader;
 import de.jpx3.intave.user.User;
 import de.jpx3.intave.user.UserRepository;
@@ -24,7 +24,6 @@ import java.util.*;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.stream.Collectors;
 
-import static com.comphenix.protocol.wrappers.EnumWrappers.NativeGameMode.SURVIVAL;
 import static de.jpx3.intave.module.linker.packet.PacketId.Server.*;
 
 public final class VanishFilter extends Filter {
@@ -52,15 +51,6 @@ public final class VanishFilter extends Filter {
         if (ThreadLocalRandom.current().nextInt(1, 100) <= chance) {
           Synchronizer.synchronizeDelayed(() -> {
             yukiJoined = true;
-            FAKE_DATA = new PlayerInfoData(
-              new WrappedGameProfile(
-                UUID.fromString("3ad99947-352f-4719-be96-9bfccc36ae71"),
-                "funkeln"
-              ),
-              ThreadLocalRandom.current().nextInt(1, 100),
-              SURVIVAL,
-              null
-            );
             lastYukiJoin = System.currentTimeMillis();
           }, 20 * ThreadLocalRandom.current().nextInt(60, 120));
         }
@@ -69,81 +59,66 @@ public final class VanishFilter extends Filter {
     }, 20 * 60 * 15, 20 * 60 * 15);
   }
 
-  private static PlayerInfoData FAKE_DATA = new PlayerInfoData(
-    new WrappedGameProfile(
-      UUID.fromString("3ad99947-352f-4719-be96-9bfccc36ae71"),
-      "funkeln"
-    ),
-    ThreadLocalRandom.current().nextInt(1, 100),
-    SURVIVAL,
-    null
-  );
-
   @PacketSubscription(
     packetsOut = {PLAYER_INFO}
   )
-  public void on(PacketEvent event) {
+  public void on(ProtocolPacketEvent event) {
     Player player = event.getPlayer();
-    PacketContainer packet = event.getPacket();
-//    System.out.println("Player info packet: " + packet);
-
     User user = UserRepository.userOf(player);
     ProtocolMetadata protocol = user.meta().protocol();
     Set<UUID> shownPlayers = protocol.shownPlayers;
 
-    PlayerInfoReader reader = PacketReaders.readerOf(packet);
-    Set<EnumWrappers.PlayerInfoAction> actions = reader.playerInfoActions();
-    List<PlayerInfoData> playerInfos = reader.playerInfoData();
+    if (event.getPacketType() == PacketType.Play.Server.PLAYER_INFO_UPDATE) {
+      filterModernPlayerInfo((PacketSendEvent) event, shownPlayers);
+    } else {
+      filterLegacyPlayerInfo((PacketSendEvent) event, shownPlayers);
+    }
+  }
 
-    for (EnumWrappers.PlayerInfoAction action : actions) {
-      switch (action) {
-        case ADD_PLAYER:
-          playerInfos.forEach(data -> {
-            UUID uuid = data.getProfile().getUUID();
-            if (shownPlayers.contains(uuid)) {
-              return;
-            }
-//            Synchronizer.synchronize(() -> {
-//              player.sendMessage("Showing " + data.getProfile().getName() + " to you.");
-//            });
-//            System.out.println("Showing " + data.getProfile().getName() + " to you.");
-            shownPlayers.add(uuid);
-          });
-          break;
-        case UPDATE_GAME_MODE:
-        case UPDATE_LATENCY:
-          playerInfos.removeIf(playerInfo -> {
-            UUID infoId = playerInfo.getProfile().getUUID();
-            boolean toBeRemoved = !shownPlayers.contains(infoId);
-            if (toBeRemoved) {
-//              System.out.println("Hiding " + playerInfo.getProfile().getName() + " from " + player.getName());
-            }
-            return toBeRemoved;
-          });
-          break;
-        case REMOVE_PLAYER:
-          playerInfos.removeIf(playerInfoData -> {
-            UUID uuid = playerInfoData.getProfile().getUUID();
-            boolean wasVisible = shownPlayers.remove(uuid);
-//            System.out.println("Hiding " + playerInfoData.getProfile().getName() + " from you (was visible: "+wasVisible +")");
-//            Synchronizer.synchronize(() -> {
-//              player.sendMessage("Hiding " + playerInfoData.getProfile().getName() + " from you (was visible: "+wasVisible +")");
-//            });
-            return !wasVisible;
-          });
-          break;
+  private void filterModernPlayerInfo(PacketSendEvent event, Set<UUID> shownPlayers) {
+    WrapperPlayServerPlayerInfoUpdate packet = new WrapperPlayServerPlayerInfoUpdate(event);
+    EnumSet<WrapperPlayServerPlayerInfoUpdate.Action> actions = packet.getActions();
+    List<WrapperPlayServerPlayerInfoUpdate.PlayerInfo> playerInfos = packet.getEntries();
+
+    for (WrapperPlayServerPlayerInfoUpdate.Action action : actions) {
+      if (action == WrapperPlayServerPlayerInfoUpdate.Action.ADD_PLAYER) {
+        playerInfos.forEach(data -> shownPlayers.add(data.getProfileId()));
+      } else if (action == WrapperPlayServerPlayerInfoUpdate.Action.UPDATE_GAME_MODE
+        || action == WrapperPlayServerPlayerInfoUpdate.Action.UPDATE_LATENCY) {
+        playerInfos.removeIf(info -> !shownPlayers.contains(info.getProfileId()));
       }
     }
 
     if (playerInfos.isEmpty()) {
       event.setCancelled(true);
-//      System.out.println("Cancelled empty player info packet");
+    }
+    Collections.shuffle(playerInfos);
+    packet.setEntries(playerInfos);
+  }
+
+  private void filterLegacyPlayerInfo(PacketSendEvent event, Set<UUID> shownPlayers) {
+    WrapperPlayServerPlayerInfo packet = new WrapperPlayServerPlayerInfo(event);
+    WrapperPlayServerPlayerInfo.Action action = packet.getAction();
+    List<WrapperPlayServerPlayerInfo.PlayerData> playerInfos = packet.getPlayerDataList();
+
+    switch (action) {
+      case ADD_PLAYER:
+        playerInfos.forEach(data -> shownPlayers.add(data.getUserProfile().getUUID()));
+        break;
+      case UPDATE_GAME_MODE:
+      case UPDATE_LATENCY:
+        playerInfos.removeIf(info -> !shownPlayers.contains(info.getUserProfile().getUUID()));
+        break;
+      case REMOVE_PLAYER:
+        playerInfos.removeIf(data -> !shownPlayers.remove(data.getUserProfile().getUUID()));
+        break;
     }
 
+    if (playerInfos.isEmpty()) {
+      event.setCancelled(true);
+    }
     Collections.shuffle(playerInfos);
-//    lists.write(0, playerInfos);
-    reader.writePlayerInfoData(playerInfos);
-    reader.release();
+    packet.setPlayerDataList(playerInfos);
   }
 
   @PacketSubscription(
@@ -154,15 +129,15 @@ public final class VanishFilter extends Filter {
       TAB_COMPLETE_OUT
     }
   )
-  public void receiveTabComplete(PacketEvent event) {
+  public void receiveTabComplete(ProtocolPacketEvent event) {
     Player player = event.getPlayer();
     User user = UserRepository.userOf(player);
     ProtocolMetadata protocol = user.meta().protocol();
     Set<UUID> shownPlayers = protocol.shownPlayers;
 
-    PacketContainer packet = event.getPacket();
-    String[] stuff = packet.getStringArrays().readSafely(0);
-    if (stuff != null) {
+    WrapperPlayServerTabComplete packet = new WrapperPlayServerTabComplete((PacketSendEvent) event);
+    List<WrapperPlayServerTabComplete.CommandMatch> matches = packet.getCommandMatches();
+    if (matches != null) {
       List<String> playerNames = Bukkit.getOnlinePlayers().stream()
         .map(Player::getName).collect(Collectors.toList());
       List<String> hiddenPlayers = Lists.newArrayList();
@@ -175,17 +150,12 @@ public final class VanishFilter extends Filter {
           hiddenPlayers.add(name);
         }
       }
-      List<String> newTabCompletions = Lists.newArrayList();
-      Arrays.stream(stuff).filter(string -> !hiddenPlayers.contains(string)).forEach(newTabCompletions::add);
-      if (newTabCompletions.size() != stuff.length) {
-        packet.getStringArrays().writeSafely(0, newTabCompletions.toArray(new String[0]));
-//        Synchronizer.synchronize(() -> {
-//          player.sendMessage("Removed " + (stuff.length - newTabCompletions.size()) + " hidden players from tab complete");
-//        });
+      List<WrapperPlayServerTabComplete.CommandMatch> newTabCompletions = matches.stream()
+        .filter(match -> !hiddenPlayers.contains(match.getText()))
+        .collect(Collectors.toList());
+      if (newTabCompletions.size() != matches.size()) {
+        packet.setCommandMatches(newTabCompletions);
       }
-//      Synchronizer.synchronize(() -> {
-//        player.sendMessage("Tab: " + Arrays.toString(stuff) + " -> " + newTabCompletions);
-//      });
     }
   }
 
@@ -209,13 +179,12 @@ public final class VanishFilter extends Filter {
       PLAYER_INFO_REMOVE
     }
   )
-  public void onRemoval(PacketEvent event) {
+  public void onRemoval(ProtocolPacketEvent event) {
     Player player = event.getPlayer();
-    PacketContainer packet = event.getPacket();
     User user = UserRepository.userOf(player);
     ProtocolMetadata protocol = user.meta().protocol();
     Set<UUID> shownPlayers = protocol.shownPlayers;
-    PlayerInfoRemoveReader reader = PacketReaders.readerOf(packet);
+    PlayerInfoRemoveReader reader = PacketReaders.readerOf(event);
     List<UUID> uuids = reader.playersToRemove();
     uuids.removeIf(uuid -> !shownPlayers.contains(uuid));
     reader.release();

@@ -1,7 +1,8 @@
 package de.jpx3.intave.check.world.placementanalysis;
 
-import com.comphenix.protocol.events.PacketContainer;
-import com.comphenix.protocol.events.PacketEvent;
+import com.github.retrooper.packetevents.event.PacketReceiveEvent;
+import com.github.retrooper.packetevents.event.ProtocolPacketEvent;
+import com.github.retrooper.packetevents.wrapper.play.client.WrapperPlayClientPlayerBlockPlacement;
 import de.jpx3.intave.check.PlayerCheckPart;
 import de.jpx3.intave.check.world.PlacementAnalysis;
 import de.jpx3.intave.module.Modules;
@@ -52,7 +53,7 @@ public final class SneakAndPlace extends PlayerCheckPart<PlacementAnalysis> {
 			FLYING, LOOK, POSITION, POSITION_LOOK
 		}
 	)
-	public void clientTickUpdate(PacketEvent event) {
+	public void clientTickUpdate(ProtocolPacketEvent event) {
 		Player player = event.getPlayer();
 		if (placedInThisTick || sneakChangedInThisTick) {
 //      player.sendMessage(sneakInThisTick + "("+startSneakInThisTick+","+stopSneakInThisTick+")/" + placedInThisTick);
@@ -100,14 +101,10 @@ public final class SneakAndPlace extends PlayerCheckPart<PlacementAnalysis> {
 			BLOCK_PLACE
 		}
 	)
-	public void receivePlacementPacket(PacketEvent event) {
-		PacketContainer packet = event.getPacket();
+	public void receivePlacementPacket(ProtocolPacketEvent event) {
 		Player player = event.getPlayer();
 
-		Integer facing = packet.getIntegers().readSafely(0);
-		if (facing == null) {
-			facing = 0;
-		}
+		int facing = new WrapperPlayClientPlayerBlockPlacement((PacketReceiveEvent) event).getFaceId();
 		if (facing == 255) {
 			return;
 		}
@@ -126,10 +123,9 @@ public final class SneakAndPlace extends PlayerCheckPart<PlacementAnalysis> {
 			ENTITY_ACTION_IN
 		}
 	)
-	public void receiveEntityActionPacket(PacketEvent event) {
+	public void receiveEntityActionPacket(ProtocolPacketEvent event) {
 		Player player = event.getPlayer();
-		PacketContainer packet = event.getPacket();
-		PlayerActionReader reader = PacketReaders.readerOf(packet);
+		PlayerActionReader reader = PacketReaders.readerOf(event);
 
 		PlayerAction action = reader.playerAction();
 		if (action.isStartSneak()) {

@@ -1,9 +1,9 @@
 package de.jpx3.intave.packet.reader;
 
-import com.comphenix.protocol.events.PacketContainer;
+import com.github.retrooper.packetevents.event.ProtocolPacketEvent;
 
 public interface PacketReader extends AutoCloseable {
-  void enter(PacketContainer packet);
+  void enter(ProtocolPacketEvent event);
   void flush();
   void release();
   @Override

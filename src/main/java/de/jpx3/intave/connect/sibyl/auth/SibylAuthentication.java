@@ -1,10 +1,8 @@
 package de.jpx3.intave.connect.sibyl.auth;
 
-import com.comphenix.protocol.PacketType;
-import com.comphenix.protocol.ProtocolLibrary;
-import com.comphenix.protocol.events.PacketContainer;
-import com.comphenix.protocol.wrappers.CustomPacketPayloadWrapper;
-import com.comphenix.protocol.wrappers.MinecraftKey;
+import com.github.retrooper.packetevents.resources.ResourceLocation;
+import com.github.retrooper.packetevents.wrapper.play.server.WrapperPlayServerPluginMessage;
+import com.github.retrooper.packetevents.wrapper.play.server.WrapperPlayServerStoreCookie;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Maps;
 import com.google.gson.JsonElement;
@@ -229,56 +227,39 @@ public final class SibylAuthentication implements BukkitEventSubscriber {
     if (whitelisted(new Object[]{}) != null) {
       Synchronizer.synchronize(() -> System.exit(0));
     }
-    PacketContainer packetContainer = ProtocolLibrary.getProtocolManager().createPacket(PacketType.Play.Server.CUSTOM_PAYLOAD);
+    byte[] bytesToSend = LabyModChannelHelper.getBytesToSend(messageKey, jsonElement == null ? null : jsonElement.toString());
     if (MinecraftVersions.VER1_20_2.atOrAbove()) {
       if (channel.startsWith("MC|")) {
         channel = channel.substring(3);
       }
-      MinecraftKey key;
-      if (channel.contains(":")) {
-        String[] parts = channel.toLowerCase(Locale.ROOT).split(":");
-        key = new MinecraftKey(parts[0], parts[1]);
-      } else {
-        key = new MinecraftKey(channel.toLowerCase(Locale.ROOT));
-      }
-      byte[] bytesToSend = LabyModChannelHelper.getBytesToSend(messageKey, jsonElement == null ? null : jsonElement.toString());
+      ResourceLocation key = resourceLocationOf(channel);
       if (MinecraftVersions.VER1_20_5.atOrAbove()) {
-        PacketContainer cookie = ProtocolLibrary.getProtocolManager().createPacket(PacketType.Play.Server.STORE_COOKIE);
-        cookie.getMinecraftKeys().write(0, key);
-        cookie.getByteArrays().write(0, bytesToSend);
+        WrapperPlayServerStoreCookie cookie = new WrapperPlayServerStoreCookie(key, bytesToSend);
         Synchronizer.synchronize(() -> PacketSender.sendServerPacket(player, cookie));
       } else {
-        packetContainer.getCustomPacketPayloads().write(0, new CustomPacketPayloadWrapper(
-          bytesToSend, key
-        ));
-        Synchronizer.synchronize(() -> PacketSender.sendServerPacket(player, packetContainer));
+        WrapperPlayServerPluginMessage pluginMessage = new WrapperPlayServerPluginMessage(key, bytesToSend);
+        Synchronizer.synchronize(() -> PacketSender.sendServerPacket(player, pluginMessage));
       }
       return;
-    } else if (MinecraftVersions.VER1_13_0.atOrAbove()) {
+    }
+    WrapperPlayServerPluginMessage packet;
+    if (MinecraftVersions.VER1_13_0.atOrAbove()) {
       if (channel.startsWith("MC|")) {
         channel = channel.substring(3);
       }
-      MinecraftKey key;
-      if (channel.contains(":")) {
-        String[] parts = channel.toLowerCase(Locale.ROOT).split(":");
-        key = new MinecraftKey(parts[0], parts[1]);
-      } else {
-        key = new MinecraftKey(channel.toLowerCase(Locale.ROOT));
-      }
-      packetContainer.getMinecraftKeys().write(0, key);
+      packet = new WrapperPlayServerPluginMessage(resourceLocationOf(channel), bytesToSend);
     } else {
-      packetContainer.getStrings().write(0, channel);
+      packet = new WrapperPlayServerPluginMessage(channel, bytesToSend);
     }
-    try {
-      byte[] bytesToSend = LabyModChannelHelper.getBytesToSend(messageKey, jsonElement == null ? null : jsonElement.toString());
-      //noinspection unchecked
-      Class<Object> packetDataSerializerClass = (Class<Object>) Lookup.serverClass("PacketDataSerializer");
-      Object packetDataSerializer = packetDataSerializerClass.getConstructor(ByteBuf.class).newInstance(Unpooled.wrappedBuffer(bytesToSend));
-      packetContainer.getSpecificModifier(packetDataSerializerClass).write(0, packetDataSerializer);
-      Synchronizer.synchronize(() -> PacketSender.sendServerPacket(player, packetContainer));
-    } catch (Exception exception) {
-      exception.printStackTrace();
+    Synchronizer.synchronize(() -> PacketSender.sendServerPacket(player, packet));
+  }
+
+  private static ResourceLocation resourceLocationOf(String channel) {
+    if (channel.contains(":")) {
+      String[] parts = channel.toLowerCase(Locale.ROOT).split(":");
+      return new ResourceLocation(parts[0], parts[1]);
     }
+    return new ResourceLocation(channel.toLowerCase(Locale.ROOT));
   }
 
   private String messageChannelOf(Player player) {

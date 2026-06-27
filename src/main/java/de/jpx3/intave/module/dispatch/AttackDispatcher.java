@@ -1,11 +1,11 @@
 package de.jpx3.intave.module.dispatch;
 
-import com.comphenix.protocol.PacketType;
-import com.comphenix.protocol.ProtocolLibrary;
-import com.comphenix.protocol.events.PacketContainer;
-import com.comphenix.protocol.events.PacketEvent;
-import com.comphenix.protocol.wrappers.WrappedAttribute;
-import com.google.common.collect.Lists;
+import com.github.retrooper.packetevents.event.CancellableEvent;
+import com.github.retrooper.packetevents.event.PacketSendEvent;
+import com.github.retrooper.packetevents.event.ProtocolPacketEvent;
+import com.github.retrooper.packetevents.wrapper.play.server.WrapperPlayServerSetSlot;
+import com.github.retrooper.packetevents.wrapper.play.server.WrapperPlayServerUpdateAttributes;
+import io.github.retrooper.packetevents.util.SpigotConversionUtil;
 import de.jpx3.intave.adapter.MinecraftVersions;
 import de.jpx3.intave.check.combat.Heuristics;
 import de.jpx3.intave.executor.Synchronizer;
@@ -25,7 +25,6 @@ import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
 import org.bukkit.enchantments.Enchantment;
 import org.bukkit.entity.Player;
-import org.bukkit.event.Cancellable;
 import org.bukkit.event.entity.EntityDamageByEntityEvent;
 import org.bukkit.event.entity.EntityDamageEvent;
 import org.bukkit.event.player.PlayerJoinEvent;
@@ -68,7 +67,7 @@ public final class AttackDispatcher extends Module {
     }
   )
   public void receiveUseEntity(
-    User user, EntityUseReader reader, Cancellable cancellable
+    User user, EntityUseReader reader, CancellableEvent cancellable
   ) {
     Player player = user.player();
     if (player.isDead()) {
@@ -139,7 +138,7 @@ public final class AttackDispatcher extends Module {
       RESPAWN
     }
   )
-  public void sentRespawn(PacketEvent event) {
+  public void sentRespawn(ProtocolPacketEvent event) {
     Player player = event.getPlayer();
     Synchronizer.synchronizeDelayed(() -> disableReducing(player), 4);
   }
@@ -150,9 +149,13 @@ public final class AttackDispatcher extends Module {
       SET_SLOT
     }
   )
-  public void filterSharpness(PacketEvent event) {
-    PacketContainer packet = event.getPacket();
-    ItemStack item = packet.getItemModifier().read(0).clone();
+  public void filterSharpness(ProtocolPacketEvent event) {
+    WrapperPlayServerSetSlot packet = new WrapperPlayServerSetSlot((PacketSendEvent) event);
+    com.github.retrooper.packetevents.protocol.item.ItemStack peItem = packet.getItem();
+    if (peItem == null) {
+      return;
+    }
+    ItemStack item = SpigotConversionUtil.toBukkitItemStack(peItem).clone();
     if (REDUCING_DISABLED) {
       if (item.containsEnchantment(Enchantment.DAMAGE_ALL)) {
         int level = item.getEnchantmentLevel(Enchantment.DAMAGE_ALL);
@@ -187,7 +190,7 @@ public final class AttackDispatcher extends Module {
 //        item.setItemMeta(itemMeta);
 //      }
 //    }
-    packet.getItemModifier().write(0, item);
+    packet.setItem(SpigotConversionUtil.fromBukkitItemStack(item));
   }
 
   private static final int[] ROMAN_STEPS = {1000, 900, 500, 400, 100, 90, 50, 40, 10, 9, 5, 4, 1};
@@ -231,10 +234,10 @@ public final class AttackDispatcher extends Module {
     if (!REDUCING_DISABLED) {
       return;
     }
-    PacketContainer packet = ProtocolLibrary.getProtocolManager().createPacket(PacketType.Play.Server.UPDATE_ATTRIBUTES);
-    packet.getIntegers().write(0, player.getEntityId());
-    WrappedAttribute attribute = WrappedAttribute.newBuilder().packet(packet).attributeKey("generic.attackDamage").baseValue(0).modifiers(Collections.emptyList()).build();
-    packet.getAttributeCollectionModifier().write(0, Lists.newArrayList(attribute));
+    WrapperPlayServerUpdateAttributes.Property attribute = new WrapperPlayServerUpdateAttributes.Property(
+      "generic.attackDamage", 0, Collections.emptyList());
+    WrapperPlayServerUpdateAttributes packet = new WrapperPlayServerUpdateAttributes(
+      player.getEntityId(), Collections.singletonList(attribute));
     PacketSender.sendServerPacket(player, packet);
   }
 }

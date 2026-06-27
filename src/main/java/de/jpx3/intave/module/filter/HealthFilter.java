@@ -1,14 +1,14 @@
 package de.jpx3.intave.module.filter;
 
-import com.comphenix.protocol.events.PacketContainer;
-import com.comphenix.protocol.events.PacketEvent;
-import com.comphenix.protocol.wrappers.WrappedWatchableObject;
+import com.github.retrooper.packetevents.event.PacketSendEvent;
+import com.github.retrooper.packetevents.event.ProtocolPacketEvent;
+import com.github.retrooper.packetevents.protocol.entity.data.EntityData;
+import com.github.retrooper.packetevents.wrapper.play.server.WrapperPlayServerEntityMetadata;
+import io.github.retrooper.packetevents.util.SpigotConversionUtil;
 import de.jpx3.intave.IntavePlugin;
 import de.jpx3.intave.adapter.MinecraftVersions;
 import de.jpx3.intave.module.linker.packet.ListenerPriority;
 import de.jpx3.intave.module.linker.packet.PacketSubscription;
-import de.jpx3.intave.packet.reader.EntityMetadataReader;
-import de.jpx3.intave.packet.reader.PacketReaders;
 import org.bukkit.entity.EnderDragon;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.LivingEntity;
@@ -33,37 +33,30 @@ public final class HealthFilter extends Filter {
     },
     priority = ListenerPriority.NORMAL
   )
-  public void depriveHealth(PacketEvent event) {
-    // Rule #3151235: When editing metadata, do a deepClone().
-    // Why? I still don't know after 5 hours of debugging.
-    event.setPacket(event.getPacket().deepClone());
-    PacketContainer packet = event.getPacket();
-    EntityMetadataReader reader = PacketReaders.readerOf(packet);
-    Entity entity = reader.entityBy(event);
+  public void depriveHealth(ProtocolPacketEvent event) {
+    WrapperPlayServerEntityMetadata packet = new WrapperPlayServerEntityMetadata((PacketSendEvent) event);
+    org.bukkit.entity.Player player = event.getPlayer();
+    Entity entity = SpigotConversionUtil.getEntityById(player.getWorld(), packet.getEntityId());
     if (entity == null || entity instanceof EnderDragon || entity instanceof Wither) {
-      reader.release();
       return;
     }
-    List<WrappedWatchableObject> watchables = reader.legacyMetadataObjects();
-    if (entity instanceof LivingEntity && entity.getEntityId() != event.getPlayer().getEntityId()) {
-      if (watchables != null) {
-        for (int i = 0; i < watchables.size(); i++) {
-          WrappedWatchableObject watchable = watchables.get(i);
-          if (watchable.getIndex() == 6 && watchable.getValue() instanceof Float) {
-            watchable = new WrappedWatchableObject(watchable.getIndex(), watchable.getRawValue());
-            stripHealthFrom(watchable);
-            watchables.set(i, watchable);
+    List<EntityData<?>> metadata = packet.getEntityMetadata();
+    if (entity instanceof LivingEntity && entity.getEntityId() != player.getEntityId()) {
+      if (metadata != null) {
+        for (EntityData<?> data : metadata) {
+          if (data.getIndex() == 6 && data.getValue() instanceof Float) {
+            stripHealthFrom(data);
           }
         }
       }
     }
-    reader.setLegacyMetadataObjects(watchables);
-    reader.release();
+    packet.setEntityMetadata(metadata);
   }
 
-  private void stripHealthFrom(WrappedWatchableObject watchable) {
-    if (watchable != null && watchable.getIndex() == 6 && watchable.getRawValue() instanceof Float && (float) watchable.getRawValue() != 0.0F) {
-      watchable.setValue(createFakeHealth());
+  @SuppressWarnings("unchecked")
+  private void stripHealthFrom(EntityData<?> data) {
+    if (data != null && data.getIndex() == 6 && data.getValue() instanceof Float && (float) data.getValue() != 0.0F) {
+      ((EntityData<Float>) data).setValue(createFakeHealth());
     }
   }
 

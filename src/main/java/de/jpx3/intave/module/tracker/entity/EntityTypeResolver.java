@@ -1,9 +1,9 @@
 package de.jpx3.intave.module.tracker.entity;
 
-import com.comphenix.protocol.events.PacketContainer;
-import com.comphenix.protocol.events.PacketEvent;
-import com.comphenix.protocol.reflect.FieldAccessException;
-import com.comphenix.protocol.wrappers.WrappedDataWatcher;
+import com.github.retrooper.packetevents.event.PacketSendEvent;
+import com.github.retrooper.packetevents.event.ProtocolPacketEvent;
+import com.github.retrooper.packetevents.wrapper.play.server.WrapperPlayServerSpawnEntity;
+import com.github.retrooper.packetevents.wrapper.play.server.WrapperPlayServerSpawnLivingEntity;
 import de.jpx3.intave.IntaveLogger;
 import de.jpx3.intave.IntavePlugin;
 import de.jpx3.intave.access.IntaveInternalException;
@@ -35,52 +35,16 @@ public final class EntityTypeResolver {
   private final boolean AT_OR_ABOVE_1_10 = MinecraftVersions.VER1_10_0.atOrAbove();
   private final boolean AT_OR_ABOVE_1_14 = MinecraftVersions.VER1_14_0.atOrAbove();
   private final boolean AT_OR_ABOVE_1_15 = MinecraftVersions.VER1_15_0.atOrAbove();
-  private static final boolean DATA_WATCHER_ACCESS_UNDER_1_15 = !MinecraftVersions.VER1_15_0.atOrAbove();
   private static final boolean ENTITY_TYPE_ACCESS_UNDER_1_14 = !MinecraftVersions.VER1_14_0.atOrAbove();
-  private String dataWatcherEntityFieldName;
 
   public EntityTypeResolver(IntavePlugin plugin) {
-    if (DATA_WATCHER_ACCESS_UNDER_1_15) {
-      registerDataWatcherEntityFieldName();
-    }
   }
 
-  private void registerDataWatcherEntityFieldName() {
-    MinecraftVersion serverVersion = ProtocolLibraryAdapter.serverVersion();
-    if (serverVersion.isAtLeast(MinecraftVersions.VER1_14_0)) {
-      dataWatcherEntityFieldName = "entity";
-    } else if (serverVersion.isAtLeast(MinecraftVersions.VER1_10_0)) {
-      dataWatcherEntityFieldName = "c";
-    } else if (serverVersion.isAtLeast(MinecraftVersions.VER1_9_0)) {
-      dataWatcherEntityFieldName = "b";
-    } else {
-      dataWatcherEntityFieldName = "a";
-    }
+  public EntityTypeData entityTypeDataOfDeadEntity(ProtocolPacketEvent event) {
+    WrapperPlayServerSpawnEntity packet = new WrapperPlayServerSpawnEntity((PacketSendEvent) event);
+    int entityId = packet.getEntityId();
 
-    // search field
-
-    Class<?> entityClass = Lookup.serverClass("Entity");
-    Class<?> dataWatcherClass = Lookup.serverClass("DataWatcher");
-
-    for (Field declaredField : dataWatcherClass.getDeclaredFields()) {
-      if (declaredField.getType() == entityClass) {
-        String fieldName = declaredField.getName();
-//        if (!dataWatcherEntityFieldName.equals(fieldName)) {
-//          IntaveLogger.logger().pushPrintln("[Intave] Conflicting method name: \"" + dataWatcherEntityFieldName + "\" expected but found \"" + fieldName + "\" for entity-from-dw access");
-//        }
-        dataWatcherEntityFieldName = fieldName;
-        break;
-      }
-    }
-  }
-
-  private static final int ENTITY_DEAD_TYPE_FIELD = MinecraftVersions.VER1_9_0.atOrAbove() ? 6 : 9;
-
-  public EntityTypeData entityTypeDataOfDeadEntity(PacketEvent event) {
-    PacketContainer packet = event.getPacket();
-    int entityId = packet.getIntegers().read(0);
-
-    EntityReader entityReader = PacketReaders.readerOf(packet);
+    EntityReader entityReader = PacketReaders.readerOf(event);
     Entity entity = entityReader.entityBy(event);
     entityReader.release();
 
@@ -88,19 +52,27 @@ public final class EntityTypeResolver {
       return entityTypeDataOfBukkitEntity(entity);
     } else {
       if (ENTITY_TYPE_ACCESS_UNDER_1_14) {
+        // Pre-1.14 the spawn-object packet carries the legacy "object data" type byte; PacketEvents
+        // surfaces it through getData(). The numeric object-type is the entity's legacy type id.
         try {
-          int deadEntityType = packet.getIntegers().read(ENTITY_DEAD_TYPE_FIELD);
+          int deadEntityType = packet.getData();
           String name = nameByDeadEntityType(deadEntityType);
           HitboxSize boundaries = hitboxBoundariesByDeadEntityType(deadEntityType);
           return new EntityTypeData(name, boundaries, deadEntityType == 1 ? 41 : -1, false, 2);
-        } catch (FieldAccessException exception) {
+        } catch (Exception exception) {
           IntaveLogger.logger().info("Can't access type data of " + entityId);
           exception.printStackTrace();
         }
         return new EntityTypeData("Invalid", HitboxSize.zero(), -2, false, 3);
       } else {
-        EntityType entityType = packet.getEntityTypeModifier().read(0);
-        Class<? extends Entity> entityClass = extractSubClassFromEntity(entityType.getEntityClass());
+        // 1.14+: resolve the bukkit EntityType from the PacketEvents entity type to derive name/hitbox.
+        org.bukkit.entity.EntityType bukkitType = io.github.retrooper.packetevents.util.SpigotConversionUtil
+          .toBukkitEntityType(packet.getEntityType());
+        Class<? extends Entity> entityClass = bukkitType == null ? null
+          : extractSubClassFromEntity(bukkitType.getEntityClass());
+        if (entityClass == null) {
+          return new EntityTypeData("Invalid", HitboxSize.zero(), -2, false, 4);
+        }
         String entityClassName = entityClass.getSimpleName();
         HitboxSize size = HitboxSizeAccess.dimensionsOfNMSEntityClass(entityClass);
         return new EntityTypeData(entityClassName, size, -2, false, 4);
@@ -108,32 +80,25 @@ public final class EntityTypeResolver {
     }
   }
 
-  public EntityTypeData entityTypeDataOfLivingEntity(PacketEvent event) {
-    PacketContainer packet = event.getPacket();
-    int entityId = packet.getIntegers().read(0);
+  public EntityTypeData entityTypeDataOfLivingEntity(ProtocolPacketEvent event) {
+    WrapperPlayServerSpawnLivingEntity packet =
+      new WrapperPlayServerSpawnLivingEntity((PacketSendEvent) event);
+    int entityId = packet.getEntityId();
     Entity entity = EntityTracker.serverEntityByIdentifier(event.getPlayer(), entityId);
     if (entity != null) {
       return entityTypeDataOfBukkitEntity(entity);
     } else {
-      if (DATA_WATCHER_ACCESS_UNDER_1_15) {
-        WrappedDataWatcher dataWatcher = packet.getDataWatcherModifier().read(0);
-        // Checks if the packet has a Datawatcher
-        if (dataWatcher != null && dataWatchesIncludesEntity(dataWatcher)) {
-          return entityTypeDataOfDataWatcher(dataWatcher, true);
-        } else {
-          int entityTypeId = packet.getIntegers().read(1);
-          return EntityTypeDataAccessor.resolveFromId(entityTypeId, true);
-        }
-      } else {
-        int entityTypeId = packet.getIntegers().read(1);
-        return EntityTypeDataAccessor.resolveFromId(entityTypeId, true);
-      }
+      // TODO(pe-migration): pre-1.15 ProtocolLib could pull a live NMS entity instance out of the
+      // spawn packet's WrappedDataWatcher to resolve custom (plugin) entity classes. PacketEvents only
+      // exposes the decoded metadata list, not the NMS entity, so custom-entity hitbox/name resolution
+      // via the data watcher is no longer possible. Fall back to numeric type-id resolution for all versions.
+      int entityTypeId = packet.getEntityType().getId(event.getClientVersion());
+      return EntityTypeDataAccessor.resolveFromId(entityTypeId, true);
     }
   }
 
-  public EntityTypeData entityTypeDataOfEntityMetadata(PacketEvent event, int entityTypeId, EntityMetadataReader reader) {
-    PacketContainer packet = event.getPacket();
-    int entityId = packet.getIntegers().read(0);
+  public EntityTypeData entityTypeDataOfEntityMetadata(ProtocolPacketEvent event, int entityTypeId, EntityMetadataReader reader) {
+    int entityId = reader.entityId();
     Entity entity = EntityTracker.serverEntityByIdentifier(event.getPlayer(), entityId);
     if (entity != null) {
       return entityTypeDataOfBukkitEntity(entity);
@@ -240,22 +205,6 @@ public final class EntityTypeResolver {
     return new EntityTypeData(name, hitBoxSize, entity.getType().getTypeId(), isEntityLiving, 6);
   }
 
-  public boolean dataWatchesIncludesEntity(WrappedDataWatcher dataWatcher) {
-    return entityOfDataWatcher(dataWatcher) != null;
-  }
-
-  private EntityTypeData entityTypeDataOfDataWatcher(WrappedDataWatcher dataWatcher, boolean isLivingEntity) {
-    Object entity = entityOfDataWatcher(dataWatcher);
-    HitboxSize hitBoxSize = HitboxSizeAccess.dimensionsOfNative(entity);
-    String name = entityNameOf(entity);
-    int entityTypeId = entityTypeIdOfDataWatcher(dataWatcher);
-    return new EntityTypeData(name, hitBoxSize, entityTypeId, isLivingEntity, 7);
-  }
-
-  private int entityTypeIdOfDataWatcher(WrappedDataWatcher dataWatcher) {
-    return dataWatcher.getEntity().getType().getTypeId();
-  }
-
   private String entityNameOf(Object entity) {
     String entityName = extractSubClassFromEntity((Class<? extends Entity>) entity.getClass()).getSimpleName();
     if (entityName.startsWith("Entity")) {
@@ -290,31 +239,6 @@ public final class EntityTypeResolver {
     }
     subClassCache.put(entityClass, (Class<? extends Entity>) hierarchySearch);
     return (Class<? extends Entity>) hierarchySearch;
-  }
-
-  private Object entityOfDataWatcher(WrappedDataWatcher dataWatcher) {
-    Object handle = dataWatcher.getHandle();
-    Class<?> handleClass = handle.getClass();
-    try {
-      return entityByHandle(handle, handleClass.getDeclaredField(dataWatcherEntityFieldName));
-    } catch (NoSuchFieldException exception) {
-      throw new IntaveInternalException(exception);
-    }
-  }
-
-  private Object entityByHandle(Object handle, Field entityField) {
-    try {
-      ensureAccessibility(entityField);
-      return entityField.get(handle);
-    } catch (Exception exception) {
-      throw new IntaveInternalException(exception);
-    }
-  }
-
-  private void ensureAccessibility(Field field) {
-    if (!field.isAccessible()) {
-      field.setAccessible(true);
-    }
   }
 
   private String nameByDeadEntityType(int deadEntityType) {

@@ -1,6 +1,6 @@
 package de.jpx3.intave.share;
 
-import com.comphenix.protocol.wrappers.EnumWrappers;
+import com.github.retrooper.packetevents.protocol.world.BlockFace;
 import com.google.common.base.Predicate;
 import com.google.common.collect.Iterators;
 import com.google.common.collect.Maps;
@@ -313,9 +313,9 @@ public enum Direction {
     return this.name;
   }
 
-  // not the best solution, but it should be obfuscation-compatible
-  public EnumWrappers.Direction toDirection() {
-    return EnumWrappers.Direction.values()[getIndex()];
+  // PacketEvents' BlockFace shares the same D-U-N-S-W-E ordering for indices 0-5.
+  public BlockFace toDirection() {
+    return BlockFace.values()[getIndex()];
   }
 
   public static Direction func_181076_a(Direction.AxisDirection p_181076_0_, Direction.Axis p_181076_1_) {

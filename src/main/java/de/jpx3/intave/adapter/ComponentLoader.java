@@ -1,10 +1,7 @@
 package de.jpx3.intave.adapter;
 
-import com.comphenix.protocol.ProtocolLibrary;
-import com.comphenix.protocol.ProtocolManager;
 import de.jpx3.intave.IntavePlugin;
 import de.jpx3.intave.access.IntaveInternalException;
-import de.jpx3.intave.connect.IntaveDomains;
 import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
 import org.bukkit.plugin.InvalidDescriptionException;
@@ -31,14 +28,9 @@ public final class ComponentLoader {
   }
 
   public void prepareComponents() {
-    String version = Bukkit.getVersion();
-    if (version.contains("MC: 1.21.11") || version.contains("MC: 1.21.10") || version.contains("MC: 26.1") || version.contains("MC: 26.2")) {
-      essentialComponents.put("ProtocolLib", "https://github.com/Jpx3/ProtocolLib/releases/download/dev-build/ProtocolLib.jar");
-    } else if (version.contains("MC: 1.19") || version.contains("MC: 1.20") || version.contains("MC: 1.21")) {
-      essentialComponents.put("ProtocolLib", "https://github.com/dmulloy2/ProtocolLib/releases/download/5.4.0/ProtocolLib.jar");
-    } else {
-      essentialComponents.put("ProtocolLib", "https://" + IntaveDomains.primaryServiceDomain() + "/resource/ProtocolLib-4-8-0.jar");
-    }
+    // PacketEvents covers Minecraft 1.8 through the latest releases with a single
+    // artifact, so unlike ProtocolLib there is no per-version branching required.
+    essentialComponents.put("packetevents", "https://github.com/retrooper/packetevents/releases/download/v2.12.2/packetevents-spigot-2.12.2.jar");
   }
 
   public void loadComponents() {
@@ -82,13 +74,10 @@ public final class ComponentLoader {
       download(in, componentPluginFile.toPath());
       plugin.logger().info(ChatColor.GREEN + "Downloaded " + componentName);
       Plugin componentPlugin = this.plugin.getServer().getPluginManager().loadPlugin(componentPluginFile);
-      ProtocolManager protocolManager = ProtocolLibrary.getProtocolManager();
-      if (protocolManager == null) {
-        try {
-          componentPlugin.onLoad();
-        } catch (Throwable throwable) {
-          // ProtocolLib Moment
-        }
+      try {
+        componentPlugin.onLoad();
+      } catch (Throwable throwable) {
+        // onLoad may have already been invoked by the plugin manager
       }
       this.plugin.getServer().getPluginManager().enablePlugin(componentPlugin);
     }

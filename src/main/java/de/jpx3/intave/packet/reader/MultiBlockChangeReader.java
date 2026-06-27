@@ -1,46 +1,30 @@
 package de.jpx3.intave.packet.reader;
 
-import com.comphenix.protocol.wrappers.BlockPosition;
-import com.comphenix.protocol.wrappers.MultiBlockChangeInfo;
-import com.comphenix.protocol.wrappers.WrappedBlockData;
-import de.jpx3.intave.adapter.MinecraftVersions;
+import com.github.retrooper.packetevents.event.PacketSendEvent;
+import com.github.retrooper.packetevents.protocol.player.ClientVersion;
+import com.github.retrooper.packetevents.protocol.world.states.WrappedBlockState;
+import com.github.retrooper.packetevents.util.Vector3i;
+import com.github.retrooper.packetevents.wrapper.play.server.WrapperPlayServerMultiBlockChange;
+import com.github.retrooper.packetevents.wrapper.play.server.WrapperPlayServerMultiBlockChange.EncodedBlock;
 
 import java.util.ArrayList;
 import java.util.List;
 
 public final class MultiBlockChangeReader extends CompiledPacketReader implements BlockChanges {
-  private static final boolean USE_SECTIONS = MinecraftVersions.VER1_16_2.atOrAbove();
-  private List<BlockPosition> blockPositions;
-  private List<WrappedBlockData> blockDataList;
+  private List<Vector3i> blockPositions;
+  private List<WrappedBlockState> blockDataList;
 
+  @Override
   public void compile() {
-    if (USE_SECTIONS) {
-      BlockPosition blockPosition = packet().getSectionPositions().readSafely(0);
-      int chunkXBase = blockPosition.getX() << 4;
-      int chunkYBase = blockPosition.getY() << 4;
-      int chunkZBase = blockPosition.getZ() << 4;
-      short[] relativePositions = packet().getShortArrays().read(0);
-      WrappedBlockData[] blockInfos = packet().getBlockDataArrays().read(0);
-      int expectedOutputLength = blockInfos.length;
-      blockPositions = new ArrayList<>(expectedOutputLength);
-      blockDataList = new ArrayList<>(expectedOutputLength);
-      for (int i = 0; i < relativePositions.length; i++) {
-        short relativePosition = relativePositions[i];
-        int posX = chunkXBase + (relativePosition >>> 8 & 0xF);
-        int posY = chunkYBase + (relativePosition & 0xF);
-        int posZ = chunkZBase + (relativePosition >>> 4 & 0xF);
-        blockPositions.add(new BlockPosition(posX, posY, posZ));
-        blockDataList.add(blockInfos[i]);
-      }
-    } else {
-      MultiBlockChangeInfo[] multiBlockChangeInfos = packet().getMultiBlockChangeInfoArrays().readSafely(0);
-      int expectedOutputLength = multiBlockChangeInfos.length;
-      blockPositions = new ArrayList<>(expectedOutputLength);
-      blockDataList = new ArrayList<>(expectedOutputLength);
-      for (MultiBlockChangeInfo changeInfo : multiBlockChangeInfos) {
-        blockPositions.add(new BlockPosition(changeInfo.getAbsoluteX(), changeInfo.getY(), changeInfo.getAbsoluteZ()));
-        blockDataList.add(changeInfo.getData());
-      }
+    WrapperPlayServerMultiBlockChange wrapper = new WrapperPlayServerMultiBlockChange((PacketSendEvent) event());
+    ClientVersion clientVersion = event().getClientVersion();
+    EncodedBlock[] blocks = wrapper.getBlocks();
+    blockPositions = new ArrayList<>(blocks.length);
+    blockDataList = new ArrayList<>(blocks.length);
+    for (EncodedBlock block : blocks) {
+      // PacketEvents decodes section-relative coordinates into absolute world coordinates.
+      blockPositions.add(new Vector3i(block.getX(), block.getY(), block.getZ()));
+      blockDataList.add(block.getBlockState(clientVersion));
     }
   }
 
@@ -51,11 +35,13 @@ public final class MultiBlockChangeReader extends CompiledPacketReader implement
     blockDataList = null;
   }
 
-  public List<BlockPosition> blockPositions() {
+  @Override
+  public List<Vector3i> blockPositions() {
     return blockPositions;
   }
 
-  public List<WrappedBlockData> blockDataList() {
+  @Override
+  public List<WrappedBlockState> blockDataList() {
     return blockDataList;
   }
 }

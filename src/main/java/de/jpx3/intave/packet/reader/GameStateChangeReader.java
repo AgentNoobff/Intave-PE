@@ -1,14 +1,13 @@
 package de.jpx3.intave.packet.reader;
 
-import de.jpx3.intave.adapter.MinecraftVersions;
-import de.jpx3.intave.klass.Lookup;
-
-import java.lang.reflect.Field;
+import com.github.retrooper.packetevents.event.PacketSendEvent;
+import com.github.retrooper.packetevents.wrapper.play.server.WrapperPlayServerChangeGameState;
 
 public final class GameStateChangeReader extends AbstractPacketReader {
-  private final boolean HAS_WRAPPER = MinecraftVersions.VER1_16_0.atOrAbove();
-  private final Class<?> GAME_STATE_CLASS = HAS_WRAPPER ? Lookup.serverClass("PacketPlayOutGameStateChange$a") : null;
-  private Field FIELD_CACHE;
+
+  private WrapperPlayServerChangeGameState wrapper() {
+    return new WrapperPlayServerChangeGameState((PacketSendEvent) event());
+  }
 
   public GameState type() {
     int index = typeIndex();
@@ -19,30 +18,14 @@ public final class GameStateChangeReader extends AbstractPacketReader {
   }
 
   private int typeIndex() {
-    if (HAS_WRAPPER) {
-      try {
-        Object wrapper = packet().getModifier().withType(GAME_STATE_CLASS).read(0);
-        if (FIELD_CACHE == null) {
-          try {
-            FIELD_CACHE = wrapper.getClass().getDeclaredField("b");
-          } catch (NoSuchFieldException exception) {
-            // 1.21.0
-            FIELD_CACHE = wrapper.getClass().getDeclaredField("id");
-          }
-          FIELD_CACHE.setAccessible(true);
-        }
-        return (int) FIELD_CACHE.get(wrapper);
-      } catch (Exception exception) {
-        exception.printStackTrace();
-        return -1;
-      }
-    } else {
-      return packet().getIntegers().read(0);
-    }
+    // PacketEvents' Reason enum is ordered identically to the vanilla game-state reason ids, which
+    // is the index space the GameState enum below mirrors.
+    WrapperPlayServerChangeGameState.Reason reason = wrapper().getReason();
+    return reason == null ? -1 : reason.ordinal();
   }
 
   public float value() {
-    return packet().getFloat().read(0);
+    return wrapper().getValue();
   }
 
   public int valueAsInt() {

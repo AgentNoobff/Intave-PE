@@ -1,6 +1,6 @@
 package de.jpx3.intave.user.meta;
 
-import com.comphenix.protocol.wrappers.BlockPosition;
+import com.github.retrooper.packetevents.util.Vector3i;
 import de.jpx3.intave.IntaveControl;
 import de.jpx3.intave.IntavePlugin;
 import de.jpx3.intave.adapter.MinecraftVersions;
@@ -119,8 +119,8 @@ public final class MovementMetadata implements SimulationEnvironment {
   public double pistonHorizontalAllowance;
   public double pistonVerticalAllowance;
   public BoundingBox pistonCollisionArea;
-  public List<BlockPosition> shulkers = new ArrayList<>();
-  public Map<BlockPosition, ShulkerBox> shulkerData = new HashMap<>();
+  public List<Vector3i> shulkers = new ArrayList<>();
+  public Map<Vector3i, ShulkerBox> shulkerData = new HashMap<>();
   public Map<Integer, ShulkerBox> shulkerDataHashCodeAccess = new HashMap<>();
   // Will be set to true if the player sends a flying packet and receives server velocity later
   public boolean physicsUnpredictableVelocityExpected;
@@ -934,7 +934,7 @@ public final class MovementMetadata implements SimulationEnvironment {
     if (shulkerBox != null) {
       return shulkerBox;
     }
-    return shulkerData.get(new BlockPosition(posX, posY, posZ));
+    return shulkerData.get(new Vector3i(posX, posY, posZ));
   }
 
   @Override
@@ -1097,11 +1097,11 @@ public final class MovementMetadata implements SimulationEnvironment {
   private void shulkerCleanup() {
     if (!shulkerData.isEmpty()) {
       int shulkerLimit = 2048;
-      for (Iterator<BlockPosition> iterator = shulkers.iterator(); iterator.hasNext(); ) {
+      for (Iterator<Vector3i> iterator = shulkers.iterator(); iterator.hasNext(); ) {
         if (shulkerLimit-- <= 0) {
           break;
         }
-        BlockPosition shulkerBlock = iterator.next();
+        Vector3i shulkerBlock = iterator.next();
         ShulkerBox shulkerBox = shulkerData.get(shulkerBlock);
         if (shulkerBox == null) {
           iterator.remove();

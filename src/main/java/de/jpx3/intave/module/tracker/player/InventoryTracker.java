@@ -1,9 +1,11 @@
 package de.jpx3.intave.module.tracker.player;
 
-import com.comphenix.protocol.events.PacketContainer;
-import com.comphenix.protocol.events.PacketEvent;
-import com.comphenix.protocol.wrappers.EnumWrappers;
-import com.comphenix.protocol.wrappers.WrappedChatComponent;
+import com.github.retrooper.packetevents.event.PacketReceiveEvent;
+import com.github.retrooper.packetevents.event.PacketSendEvent;
+import com.github.retrooper.packetevents.event.ProtocolPacketEvent;
+import com.github.retrooper.packetevents.wrapper.play.client.WrapperPlayClientClientStatus;
+import com.github.retrooper.packetevents.wrapper.play.server.WrapperPlayServerOpenWindow;
+import net.kyori.adventure.text.Component;
 import de.jpx3.intave.block.collision.Collision;
 import de.jpx3.intave.block.type.BlockTypeAccess;
 import de.jpx3.intave.module.Module;
@@ -42,18 +44,18 @@ public final class InventoryTracker extends Module {
     },
     ignoreCancelled = false
   )
-  public void sentOpenInventory(PacketEvent event) {
+  public void sentOpenInventory(ProtocolPacketEvent event) {
     Player player = event.getPlayer();
     User user = UserRepository.userOf(player);
     InventoryMetadata inventoryData = user.meta().inventory();
-    PacketContainer packet = event.getPacket();
 
     // For some reason the client doesn't send a close window packet after closing
     // the beacon window. Therefore, we pretend the player does not have an open
     // inventory if he opens the beacon window to avoid further issues.
-    WrappedChatComponent chatComponent = packet.getChatComponents().read(0);
-    String json = chatComponent.getJson();
-    boolean clientDoesNotSendCloseWindow = json.contains("container.beacon");
+    Component title = new WrapperPlayServerOpenWindow((PacketSendEvent) event).getTitle();
+    // The beacon window title is the translatable component "container.beacon".
+    boolean clientDoesNotSendCloseWindow = title instanceof net.kyori.adventure.text.TranslatableComponent
+      && ((net.kyori.adventure.text.TranslatableComponent) title).key().contains("beacon");
 
     if (!clientDoesNotSendCloseWindow) {
       Modules.feedback()
@@ -76,10 +78,11 @@ public final class InventoryTracker extends Module {
       CLIENT_COMMAND
     }
   )
-  public void receiveClientCommand(PacketEvent event) {
+  public void receiveClientCommand(ProtocolPacketEvent event) {
     Player player = event.getPlayer();
-    EnumWrappers.ClientCommand clientCommand = event.getPacket().getClientCommands().read(0);
-    if (clientCommand == EnumWrappers.ClientCommand.OPEN_INVENTORY_ACHIEVEMENT) {
+    WrapperPlayClientClientStatus.Action action =
+      new WrapperPlayClientClientStatus((PacketReceiveEvent) event).getAction();
+    if (action == WrapperPlayClientClientStatus.Action.OPEN_INVENTORY_ACHIEVEMENT) {
       openInventory(player);
     }
   }
@@ -125,7 +128,7 @@ public final class InventoryTracker extends Module {
     },
     ignoreCancelled = false
   )
-  public void sentCloseInventory(PacketEvent event) {
+  public void sentCloseInventory(ProtocolPacketEvent event) {
     Player player = event.getPlayer();
     Modules.feedback()
       .synchronize(player, null, (p, x) -> closeInventory(p));
@@ -142,7 +145,7 @@ public final class InventoryTracker extends Module {
       PacketId.Client.CLOSE_WINDOW
     }
   )
-  public void receiveCloseWindow(PacketEvent event) {
+  public void receiveCloseWindow(ProtocolPacketEvent event) {
     closeInventory(event.getPlayer());
   }
 
@@ -168,7 +171,7 @@ public final class InventoryTracker extends Module {
     },
     ignoreCancelled = false
   )
-  public void sentRespawn(PacketEvent event) {
+  public void sentRespawn(ProtocolPacketEvent event) {
     Player player = event.getPlayer();
     User user = UserRepository.userOf(player);
     InventoryMetadata inventoryData = user.meta().inventory();

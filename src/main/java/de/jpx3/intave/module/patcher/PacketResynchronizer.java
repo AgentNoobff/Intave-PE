@@ -1,7 +1,8 @@
 package de.jpx3.intave.module.patcher;
 
-import com.comphenix.protocol.events.PacketContainer;
-import com.comphenix.protocol.events.PacketEvent;
+import com.github.retrooper.packetevents.event.PacketSendEvent;
+import com.github.retrooper.packetevents.event.ProtocolPacketEvent;
+import com.github.retrooper.packetevents.wrapper.PacketWrapper;
 import de.jpx3.intave.diagnostic.PacketSynchronizations;
 import de.jpx3.intave.executor.Synchronizer;
 import de.jpx3.intave.module.Module;
@@ -25,12 +26,18 @@ public final class PacketResynchronizer extends Module {
       REMOVE_ENTITY_EFFECT, RESPAWN, SPAWN_ENTITY, SPAWN_ENTITY_LIVING, /*WINDOW_ITEMS,*/ WORLD_BORDER
     }
   )
-  public void catchDesynchronized(PacketEvent event) {
+  public void catchDesynchronized(ProtocolPacketEvent event) {
     if (isInInvalidThread()) {
       event.setCancelled(true);
       Player player = event.getPlayer();
-      PacketContainer packet = event.getPacket();
-      Synchronizer.synchronize(() -> sendPacket(player, packet));
+      // Retain a copy of the in-flight buffer so the packet can be re-sent on the main thread after
+      // this event is cancelled (the original event buffer is released once processing returns).
+      PacketWrapper<?> source = new PacketWrapper<>((PacketSendEvent) event);
+      io.netty.buffer.ByteBuf buffer = (io.netty.buffer.ByteBuf) source.getBuffer();
+      io.netty.buffer.ByteBuf retained = buffer.copy(buffer.readerIndex(), buffer.readableBytes());
+      PacketWrapper<?> resend = new PacketWrapper<>(event.getPacketType());
+      resend.setBuffer(retained);
+      Synchronizer.synchronize(() -> sendPacket(player, resend));
       PacketSynchronizations.enterResynchronization(event.getPacketType());
     }
   }
@@ -41,7 +48,7 @@ public final class PacketResynchronizer extends Module {
     return cache.computeIfAbsent(Thread.currentThread().getName(), s -> s.startsWith("Netty "));
   }
 
-  private void sendPacket(Player player, PacketContainer packet) {
+  private void sendPacket(Player player, PacketWrapper<?> packet) {
     PacketSender.sendServerPacket(player, packet);
   }
 }

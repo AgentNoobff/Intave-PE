@@ -1,7 +1,8 @@
 package de.jpx3.intave.check.combat;
 
-import com.comphenix.protocol.PacketType;
-import com.comphenix.protocol.events.PacketEvent;
+import com.github.retrooper.packetevents.event.ProtocolPacketEvent;
+import com.github.retrooper.packetevents.protocol.packettype.PacketType;
+import com.github.retrooper.packetevents.protocol.packettype.PacketTypeCommon;
 import de.jpx3.intave.IntavePlugin;
 import de.jpx3.intave.check.MetaCheck;
 import de.jpx3.intave.check.movement.physics.environment.SimulationEnvironment;
@@ -63,12 +64,12 @@ public final class ClickSpeedLimiter extends MetaCheck<ClickSpeedLimiter.ClickSp
       FLYING, LOOK, POSITION, POSITION_LOOK
     }
   )
-  public void clientTickUpdate(PacketEvent event) {
+  public void clientTickUpdate(ProtocolPacketEvent event) {
     // TODO: Check rod right click spam
     Player player = event.getPlayer();
     User user = userOf(player);
     ClickSpeedLimiterMeta meta = metaOf(user);
-    PacketType pt = event.getPacketType();
+    PacketTypeCommon pt = event.getPacketType();
 
     AbilityMetadata abilities = user.meta().abilities();
 
@@ -84,7 +85,7 @@ public final class ClickSpeedLimiter extends MetaCheck<ClickSpeedLimiter.ClickSp
       SimulationEnvironment movementData = user.meta().movement();
 
       if (movementData.receivedFlyingPacketIn(0)
-        || meta.lastMovePacketType.name().equals("FLYING") || meta.lastMovePacketType == PacketType.Play.Client.LOOK
+        || meta.lastMovePacketType == PacketType.Play.Client.PLAYER_FLYING || meta.lastMovePacketType == PacketType.Play.Client.PLAYER_ROTATION
       ) {
         meta.countAccuratePositionPackets = 0;
 
@@ -163,7 +164,7 @@ public final class ClickSpeedLimiter extends MetaCheck<ClickSpeedLimiter.ClickSp
     prepareNextTick(meta, pt);
   }
 
-  private void prepareNextTick(ClickSpeedLimiterMeta meta, PacketType pt) {
+  private void prepareNextTick(ClickSpeedLimiterMeta meta, PacketTypeCommon pt) {
     meta.attacksDuringFlyingPackets.clear();
     meta.lastMovePacketType = pt;
 
@@ -177,7 +178,7 @@ public final class ClickSpeedLimiter extends MetaCheck<ClickSpeedLimiter.ClickSp
 
   public static final class ClickSpeedLimiterMeta extends CheckCustomMetadata {
     private long lastFlag;
-    PacketType lastMovePacketType;
+    PacketTypeCommon lastMovePacketType;
     List<Long> attacksDuringFlyingPackets = new ArrayList<>();
     int[] attackCountArray = new int[20];
     int attackArrayIndex = 0;

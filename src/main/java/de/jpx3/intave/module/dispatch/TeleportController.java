@@ -1,7 +1,12 @@
 package de.jpx3.intave.module.dispatch;
 
-import com.comphenix.protocol.events.PacketContainer;
-import com.comphenix.protocol.events.PacketEvent;
+import com.github.retrooper.packetevents.event.PacketReceiveEvent;
+import com.github.retrooper.packetevents.event.PacketSendEvent;
+import com.github.retrooper.packetevents.event.ProtocolPacketEvent;
+import com.github.retrooper.packetevents.protocol.player.DiggingAction;
+import com.github.retrooper.packetevents.wrapper.play.client.WrapperPlayClientPlayerDigging;
+import com.github.retrooper.packetevents.wrapper.play.client.WrapperPlayClientTeleportConfirm;
+import com.github.retrooper.packetevents.wrapper.play.server.WrapperPlayServerPlayerPositionAndLook;
 import de.jpx3.intave.IntaveControl;
 import de.jpx3.intave.IntaveLogger;
 import de.jpx3.intave.IntavePlugin;
@@ -37,7 +42,6 @@ import org.bukkit.entity.Player;
 import java.util.HashSet;
 import java.util.Set;
 
-import static com.comphenix.protocol.wrappers.EnumWrappers.PlayerDigType.DROP_ITEM;
 import static de.jpx3.intave.check.movement.physics.MoveMetric.LONG_TELEPORT;
 import static de.jpx3.intave.check.movement.physics.MoveMetric.TELEPORT;
 import static de.jpx3.intave.math.MathHelper.formatDouble;
@@ -73,13 +77,13 @@ public final class TeleportController implements PacketEventSubscriber {
           POSITION
       }
   )
-  public void receiveOutgoingTeleport(PacketEvent event) {
+  public void receiveOutgoingTeleport(ProtocolPacketEvent event) {
     Player player = event.getPlayer();
-    PacketContainer packet = event.getPacket();
+    WrapperPlayServerPlayerPositionAndLook packet = new WrapperPlayServerPlayerPositionAndLook((PacketSendEvent) event);
     User user = UserRepository.userOf(player);
     MovementMetadata movementData = user.meta().movement();
 
-    PlayerTeleportReader reader = PacketReaders.readerOf(packet);
+    PlayerTeleportReader reader = PacketReaders.readerOf(event);
     double positionX = reader.positionX();
     double positionY = reader.positionY();
     double positionZ = reader.positionZ();
@@ -95,10 +99,7 @@ public final class TeleportController implements PacketEventSubscriber {
     boolean relativeZMotion = flags.contains(Relative.DELTA_Z);
     boolean rotateDelta = flags.contains(Relative.ROTATE_DELTA);
 
-    Boolean funkyBoolean = packet.getBooleans().readSafely(0);
-    if (funkyBoolean == null) {
-      funkyBoolean = false;
-    }
+    boolean funkyBoolean = packet.isDismountVehicle();
 
     boolean flagModification = false;
     if (relativeXPosition) {
@@ -143,7 +144,7 @@ public final class TeleportController implements PacketEventSubscriber {
 
     movementData.setVerifiedLocation(teleportLocation.clone());
     if (NEW_TELEPORTATION) {
-      movementData.teleportId = packet.getIntegers().read(0);
+      movementData.teleportId = packet.getTeleportId();
     }
     movementData.activeTick(TELEPORT);
 
@@ -192,13 +193,12 @@ public final class TeleportController implements PacketEventSubscriber {
           TELEPORT_ACCEPT
       }
   )
-  public void receiveTeleportAccept(PacketEvent event) {
+  public void receiveTeleportAccept(ProtocolPacketEvent event) {
     Player player = event.getPlayer();
     User user = UserRepository.userOf(player);
     MovementMetadata movementData = user.meta().movement();
 
-    PacketContainer packet = event.getPacket();
-    Integer teleportId = packet.getIntegers().read(0);
+    int teleportId = new WrapperPlayClientTeleportConfirm((PacketReceiveEvent) event).getTeleportId();
 
     if (movementData.teleportId == teleportId) {
 //      Location teleportLocation = movementData.teleportLocation;
@@ -217,14 +217,14 @@ public final class TeleportController implements PacketEventSubscriber {
           BLOCK_DIG
       }
   )
-  public void clientClickUpdate(PacketEvent event) {
+  public void clientClickUpdate(ProtocolPacketEvent event) {
     if (!IntaveControl.TELEPORT_FAR_AWAY_ON_Q_PRESS) {
       return;
     }
     Player player = event.getPlayer();
     User user = UserRepository.userOf(player);
-    PacketContainer packet = event.getPacket();
-    if (packet.getPlayerDigTypes().read(0) == DROP_ITEM && user.meta().inventory().heldItemType() == Material.AIR) {
+    DiggingAction digAction = new WrapperPlayClientPlayerDigging((PacketReceiveEvent) event).getAction();
+    if (digAction == DiggingAction.DROP_ITEM && user.meta().inventory().heldItemType() == Material.AIR) {
       Synchronizer.synchronize(() -> {
         Location randomLocation = player.getLocation().clone().add(Math.random() * 1000 - 500, 0, Math.random() * 1000 - 500);
         Block highestBlockAt = randomLocation.getWorld().getHighestBlockAt(randomLocation);
@@ -239,7 +239,7 @@ public final class TeleportController implements PacketEventSubscriber {
   }
 
   @DispatchTarget
-  void receiveMovement(PacketEvent event) {
+  void receiveMovement(ProtocolPacketEvent event) {
     Player player = event.getPlayer();
     User user = UserRepository.userOf(player);
     MovementMetadata movementData = user.meta().movement();
@@ -249,7 +249,7 @@ public final class TeleportController implements PacketEventSubscriber {
     }
   }
 
-  private void resendIfLimitsExceeded(PacketEvent event) {
+  private void resendIfLimitsExceeded(ProtocolPacketEvent event) {
     Player player = event.getPlayer();
     User user = UserRepository.userOf(player);
     MovementMetadata movementData = user.meta().movement();

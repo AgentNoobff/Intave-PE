@@ -1,13 +1,18 @@
 package de.jpx3.intave.packet.converter;
 
-import com.comphenix.protocol.reflect.EquivalentConverter;
 import de.jpx3.intave.codec.CodecTranslator;
 import de.jpx3.intave.codec.StreamCodec;
 import de.jpx3.intave.share.FriendlyByteBuf;
 import de.jpx3.intave.share.Input;
 import io.netty.buffer.ByteBuf;
 
-public final class InputConverter implements EquivalentConverter<Input> {
+/**
+ * Translates between Intave's {@link Input} and the native NMS {@code Input} record by round-tripping
+ * through a {@link ByteBuf} with the matching stream codecs. The {@code getGeneric}/{@code getSpecific}/
+ * {@code getSpecificType} surface mirrors the former ProtocolLib {@code EquivalentConverter} contract so
+ * the (separately migrated) packet readers can keep calling it unchanged.
+ */
+public final class InputConverter {
 	public static final InputConverter INSTANCE = new InputConverter();
 	public static final Class<?> inputClass = inputClass();
 	private static final ThreadLocal<ByteBuf> caches = ThreadLocal.withInitial(FriendlyByteBuf::from256Unpooled);
@@ -15,7 +20,6 @@ public final class InputConverter implements EquivalentConverter<Input> {
 	private static final StreamCodec<ByteBuf, ByteBuf, Object> nativeCodec = (StreamCodec<ByteBuf, ByteBuf, Object>)
 		CodecTranslator.translatedCodecOf(inputClass);
 
-	@Override
 	public Object getGeneric(Input input) {
 		ByteBuf cache = caches.get();
 		cache.clear();
@@ -23,7 +27,6 @@ public final class InputConverter implements EquivalentConverter<Input> {
 		return nativeCodec.decode(cache);
 	}
 
-	@Override
 	public Input getSpecific(Object o) {
 	  ByteBuf cache = caches.get();
 		cache.clear();
@@ -31,7 +34,6 @@ public final class InputConverter implements EquivalentConverter<Input> {
 		return intaveCodec.decode(cache);
 	}
 
-	@Override
 	public Class<Input> getSpecificType() {
 		return Input.class;
 	}

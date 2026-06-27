@@ -40,6 +40,7 @@ repositories {
   maven { url = uri("https://oss.sonatype.org/content/repositories/snapshots") }
   maven { url = uri("https://oss.sonatype.org/content/repositories/central") }
   maven("https://repo.opencollab.dev/maven-snapshots")
+  maven("https://repo.codemc.io/repository/maven-releases/")
 
 }
 
@@ -53,10 +54,17 @@ dependencies {
     files(fileTree(mapOf("dir" to "libs/", "include" to listOf("*.jar"))).files.sorted())
   )
 
+  // PacketEvents (replaces ProtocolLib). Shipped as a separate plugin (softDepend),
+  // so it is compileOnly here and not shaded into the plugin jar.
+  compileOnly("com.github.retrooper:packetevents-spigot:2.12.2")
+
   testRuntimeOnly("it.unimi.dsi:fastutil:8.5.12")
   testImplementation("org.spigotmc:spigot-api:1.21.4-R0.1-SNAPSHOT")
-  testImplementation("net.dmulloy2:ProtocolLib:5.4.0")
+  testImplementation("com.github.retrooper:packetevents-spigot:2.12.2")
   testImplementation("io.netty:netty-all:4.2.15.Final")
+  // ByteBuddy (mock world/player factories) was previously pulled in transitively by ProtocolLib's
+  // test artifact; provide it explicitly now that ProtocolLib is gone.
+  testImplementation("net.bytebuddy:byte-buddy:1.18.2")
 
   // random shit
   compileOnly("org.jetbrains:annotations:23.1.0")
@@ -96,7 +104,7 @@ bukkit {
 
   main = "de.jpx3.intave.IntavePlugin"
   apiVersion = "1.13"
-  softDepend = listOf("ProtocolLib", "ViaVersion")
+  softDepend = listOf("packetevents", "ViaVersion")
 
   commands { register("intave") { aliases = listOf("iac") } }
 

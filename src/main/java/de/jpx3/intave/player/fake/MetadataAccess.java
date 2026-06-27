@@ -1,62 +1,46 @@
 package de.jpx3.intave.player.fake;
 
-import com.comphenix.protocol.PacketType;
-import com.comphenix.protocol.ProtocolLibrary;
-import com.comphenix.protocol.ProtocolManager;
-import com.comphenix.protocol.events.PacketContainer;
-import com.comphenix.protocol.wrappers.WrappedDataWatcher;
-import com.comphenix.protocol.wrappers.WrappedWatchableObject;
-import de.jpx3.intave.adapter.MinecraftVersions;
+import com.github.retrooper.packetevents.protocol.entity.data.EntityData;
+import com.github.retrooper.packetevents.protocol.entity.data.EntityDataType;
+import com.github.retrooper.packetevents.protocol.entity.data.EntityDataTypes;
+import com.github.retrooper.packetevents.wrapper.play.server.WrapperPlayServerEntityMetadata;
 import de.jpx3.intave.packet.PacketSender;
 import org.bukkit.entity.Player;
 
 import java.util.List;
 
 public final class MetadataAccess {
+  private static final int FLAG_INDEX = 0;
+  private static final int HEALTH_INDEX = 6;
   private static final int SPRINT_BYTE = 3;
+  private static final int SNEAK_BYTE = 1;
+  private static final int INVISIBLE_BYTE = 5;
 
   public static void setSprinting(
     Player player,
     FakePlayerIdentity identity,
     boolean sprinting
   ) {
-    WrappedDataWatcher wrappedDataWatcher = identity.dataWatcher();
-    List<WrappedWatchableObject> watchableObjects = wrappedDataWatcher.getWatchableObjects();
-    for (WrappedWatchableObject watchableObject : watchableObjects) {
-      if (watchableObject.getIndex() != 0) {
-        continue;
-      }
-      boolean reallySneaking = (wrappedDataWatcher.getByte(0) & 1 << SPRINT_BYTE) != 0;
-      if (reallySneaking != sprinting) {
-        byte b0 = wrappedDataWatcher.getByte(0);
-        byte value = sprinting ? (byte) (b0 | 1 << SPRINT_BYTE) : (byte) (b0 & (~(1 << SPRINT_BYTE)));
-        watchableObject.setValue(value);
-      }
-    }
-    updateMetadata(player, identity, watchableObjects);
+    updateFlagBit(identity, SPRINT_BYTE, sprinting);
+    updateMetadata(player, identity, identity.dataWatcher());
   }
-
-  private static final int SNEAK_BYTE = 1;
 
   public static void setSneaking(
     Player player,
     FakePlayerIdentity identity,
     boolean sneaking
   ) {
-    WrappedDataWatcher wrappedDataWatcher = identity.dataWatcher();
-    List<WrappedWatchableObject> watchableObjects = wrappedDataWatcher.getWatchableObjects();
-    for (WrappedWatchableObject watchableObject : watchableObjects) {
-      if (watchableObject.getIndex() != 0) {
-        continue;
-      }
-      boolean reallySneaking = (wrappedDataWatcher.getByte(0) & 1 << SNEAK_BYTE) != 0;
-      if (reallySneaking != sneaking) {
-        byte b0 = wrappedDataWatcher.getByte(0);
-        byte value = sneaking ? (byte) (b0 | 1 << SNEAK_BYTE) : (byte) (b0 & (~(1 << SNEAK_BYTE)));
-        watchableObject.setValue(value);
-      }
-    }
-    updateMetadata(player, identity, watchableObjects);
+    updateFlagBit(identity, SNEAK_BYTE, sneaking);
+    updateMetadata(player, identity, identity.dataWatcher());
+  }
+
+  public static void updateVisibility(
+    Player player,
+    FakePlayerIdentity identity,
+    boolean invisible
+  ) {
+    updateFlagBit(identity, INVISIBLE_BYTE, invisible);
+    updateMetadata(player, identity, identity.dataWatcher());
   }
 
   public static void updateHealthFor(
@@ -64,57 +48,65 @@ public final class MetadataAccess {
     FakePlayerIdentity identity,
     float newHealth
   ) {
-    WrappedDataWatcher wrappedDataWatcher = identity.dataWatcher();
-    List<WrappedWatchableObject> watchableObjects = wrappedDataWatcher.getWatchableObjects();
-    for (WrappedWatchableObject watchableObject : watchableObjects) {
-      if (watchableObject.getIndex() != 6) {
-        continue;
+    for (EntityData<?> entityData : identity.dataWatcher()) {
+      if (entityData.getIndex() == HEALTH_INDEX) {
+        @SuppressWarnings("unchecked")
+        EntityData<Float> healthData = (EntityData<Float>) entityData;
+        healthData.setValue(newHealth);
       }
-      watchableObject.setValue(newHealth);
     }
-    updateMetadata(player, identity, watchableObjects);
+    updateMetadata(player, identity, identity.dataWatcher());
   }
 
-  private static final int INVISIBLE_BYTE = 5;
-
-  public static void updateVisibility(
-    Player player,
-    FakePlayerIdentity identity,
-    boolean invisible
-  ) {
-    WrappedDataWatcher wrappedDataWatcher = identity.dataWatcher();
-    List<WrappedWatchableObject> watchableObjects = wrappedDataWatcher.getWatchableObjects();
-    for (WrappedWatchableObject watchableObject : watchableObjects) {
-      if (watchableObject.getIndex() != 0) {
+  @SuppressWarnings("unchecked")
+  private static void updateFlagBit(FakePlayerIdentity identity, int bit, boolean set) {
+    for (EntityData<?> entityData : identity.dataWatcher()) {
+      if (entityData.getIndex() != FLAG_INDEX) {
         continue;
       }
-      byte b0 = wrappedDataWatcher.getByte(0);
-      byte value = invisible ? (byte) (b0 | 1 << INVISIBLE_BYTE) : (byte) (b0 & ~(1 << INVISIBLE_BYTE));
-      watchableObject.setValue(value);
+      EntityData<Byte> flagData = (EntityData<Byte>) entityData;
+      byte current = flagData.getValue();
+      byte value = set
+        ? (byte) (current | 1 << bit)
+        : (byte) (current & ~(1 << bit));
+      flagData.setValue(value);
     }
-    updateMetadata(player, identity, watchableObjects);
   }
 
   private static void updateMetadata(
     Player player,
     FakePlayerIdentity identity,
-    List<WrappedWatchableObject> watchableObjects
+    List<EntityData<?>> dataWatcher
   ) {
-    ProtocolManager protocolManager = ProtocolLibrary.getProtocolManager();
-    PacketContainer packet = protocolManager.createPacket(PacketType.Play.Server.ENTITY_METADATA);
-    packet.getIntegers().writeSafely(0, identity.identifier());
-    packet.getWatchableCollectionModifier().writeSafely(0, watchableObjects);
-    packet.getBooleans().writeSafely(0, true);
+    WrapperPlayServerEntityMetadata packet = new WrapperPlayServerEntityMetadata(
+      identity.identifier(),
+      dataWatcher
+    );
     PacketSender.sendServerPacket(player, packet);
   }
 
-  private static final boolean SERIALIZE = MinecraftVersions.VER1_9_0.atOrAbove();
+  public static void metadataAccept(List<EntityData<?>> dataWatcher, int index, Class<?> classOfValue, Object value) {
+    dataWatcher.add(new EntityData<>(index, typeFor(classOfValue), value));
+  }
 
-  public static void metadataAccept(WrappedDataWatcher dataWatcher, int index, Class<?> classOfValue, Object value) {
-    if (SERIALIZE) {
-      dataWatcher.setObject(new WrappedDataWatcher.WrappedDataWatcherObject(index, WrappedDataWatcher.Registry.get(classOfValue)), value);
+  @SuppressWarnings("unchecked")
+  private static EntityDataType<Object> typeFor(Class<?> classOfValue) {
+    EntityDataType<?> type;
+    if (classOfValue == Byte.class) {
+      type = EntityDataTypes.BYTE;
+    } else if (classOfValue == Short.class) {
+      type = EntityDataTypes.SHORT;
+    } else if (classOfValue == Integer.class) {
+      type = EntityDataTypes.INT;
+    } else if (classOfValue == Float.class) {
+      type = EntityDataTypes.FLOAT;
+    } else if (classOfValue == String.class) {
+      type = EntityDataTypes.STRING;
+    } else if (classOfValue == Boolean.class) {
+      type = EntityDataTypes.BOOLEAN;
     } else {
-      dataWatcher.setObject(index, value);
+      throw new IllegalArgumentException("Unsupported metadata value type: " + classOfValue);
     }
+    return (EntityDataType<Object>) type;
   }
 }

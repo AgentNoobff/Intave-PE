@@ -1,8 +1,6 @@
 package de.jpx3.intave.user.meta;
 
-import com.comphenix.protocol.PacketType;
-import com.comphenix.protocol.ProtocolLibrary;
-import com.comphenix.protocol.events.PacketContainer;
+import com.github.retrooper.packetevents.wrapper.play.server.WrapperPlayServerSetExperience;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.gson.JsonObject;
@@ -200,10 +198,7 @@ public final class ConnectionMetadata {
   }
 
   private void sendPacketWithExperience(Player player, int level) {
-    PacketContainer packet = ProtocolLibrary.getProtocolManager().createPacket(PacketType.Play.Server.EXPERIENCE);
-    packet.getFloat().write(0, 0f);
-    packet.getIntegers().write(0, 0);
-    packet.getIntegers().write(1, level);
+    WrapperPlayServerSetExperience packet = new WrapperPlayServerSetExperience(0f, 0, level);
     PacketSender.sendServerPacket(player, packet);
   }
 

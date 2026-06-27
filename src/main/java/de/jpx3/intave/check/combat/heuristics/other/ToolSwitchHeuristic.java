@@ -1,8 +1,10 @@
 package de.jpx3.intave.check.combat.heuristics.other;
 
-import com.comphenix.protocol.events.PacketContainer;
-import com.comphenix.protocol.events.PacketEvent;
-import com.comphenix.protocol.wrappers.EnumWrappers;
+import com.github.retrooper.packetevents.event.PacketReceiveEvent;
+import com.github.retrooper.packetevents.event.ProtocolPacketEvent;
+import com.github.retrooper.packetevents.protocol.player.DiggingAction;
+import com.github.retrooper.packetevents.wrapper.play.client.WrapperPlayClientHeldItemChange;
+import com.github.retrooper.packetevents.wrapper.play.client.WrapperPlayClientPlayerDigging;
 import de.jpx3.intave.check.combat.Heuristics;
 import de.jpx3.intave.check.combat.heuristics.ClassicHeuristic;
 import de.jpx3.intave.check.combat.heuristics.HeuristicsClassicType;
@@ -27,7 +29,7 @@ public class ToolSwitchHeuristic extends ClassicHeuristic<ToolSwitchHeuristic.To
       POSITION, POSITION_LOOK, LOOK, FLYING, VEHICLE_MOVE
     }
   )
-  public void receiveMovementPacket(PacketEvent event) {
+  public void receiveMovementPacket(ProtocolPacketEvent event) {
     Player player = event.getPlayer();
     ToolSwitchHeuristicMeta meta = metaOf(player);
     meta.ticksSinceLastBreak++;
@@ -40,16 +42,16 @@ public class ToolSwitchHeuristic extends ClassicHeuristic<ToolSwitchHeuristic.To
       PacketId.Client.BLOCK_DIG
     }
   )
-  public void receiveBlockBreakAction(PacketEvent event) {
+  public void receiveBlockBreakAction(ProtocolPacketEvent event) {
     Player player = event.getPlayer();
-    PacketContainer packet = event.getPacket();
-    EnumWrappers.PlayerDigType digType = packet.getPlayerDigTypes().read(0);
+    WrapperPlayClientPlayerDigging digging = new WrapperPlayClientPlayerDigging((PacketReceiveEvent) event);
+    DiggingAction digType = digging.getAction();
     ToolSwitchHeuristicMeta meta = metaOf(player);
 
     // Update breaking state ticks
-    if (digType == EnumWrappers.PlayerDigType.START_DESTROY_BLOCK) {
+    if (digType == DiggingAction.START_DIGGING) {
       meta.ticksSinceLastBreak = 0;
-    } else if (digType == EnumWrappers.PlayerDigType.STOP_DESTROY_BLOCK) {
+    } else if (digType == DiggingAction.FINISHED_DIGGING) {
       meta.ticksSinceLastStop = 0;
     }
   }
@@ -60,12 +62,12 @@ public class ToolSwitchHeuristic extends ClassicHeuristic<ToolSwitchHeuristic.To
       PacketId.Client.HELD_ITEM_SLOT_IN
     }
   )
-  public void receiveHeldItemSlotChange(PacketEvent event) {
+  public void receiveHeldItemSlotChange(ProtocolPacketEvent event) {
     Player player = event.getPlayer();
-    PacketContainer packet = event.getPacket();
+    WrapperPlayClientHeldItemChange heldItemChange = new WrapperPlayClientHeldItemChange((PacketReceiveEvent) event);
     User user = userOf(player);
     int currentSlot = user.meta().inventory().handSlot();
-    Integer slot = packet.getIntegers().read(0);
+    int slot = heldItemChange.getSlot();
     ToolSwitchHeuristicMeta meta = metaOf(player);
 
     // If a block break was recently started something is suspicious

@@ -18,20 +18,20 @@ public enum ListenerPriority {
     return slot;
   }
 
-  public com.comphenix.protocol.events.ListenerPriority toProtocolLibPriority() {
+  public com.github.retrooper.packetevents.event.PacketListenerPriority toPacketEventsPriority() {
     switch (this) {
       case LOWEST:
-        return com.comphenix.protocol.events.ListenerPriority.LOWEST;
+        return com.github.retrooper.packetevents.event.PacketListenerPriority.LOWEST;
       case LOW:
-        return com.comphenix.protocol.events.ListenerPriority.LOW;
+        return com.github.retrooper.packetevents.event.PacketListenerPriority.LOW;
       case NORMAL:
-        return com.comphenix.protocol.events.ListenerPriority.NORMAL;
+        return com.github.retrooper.packetevents.event.PacketListenerPriority.NORMAL;
       case HIGH:
-        return com.comphenix.protocol.events.ListenerPriority.HIGH;
+        return com.github.retrooper.packetevents.event.PacketListenerPriority.HIGH;
       case HIGHEST:
-        return com.comphenix.protocol.events.ListenerPriority.HIGHEST;
+        return com.github.retrooper.packetevents.event.PacketListenerPriority.HIGHEST;
       case MONITOR:
-        return com.comphenix.protocol.events.ListenerPriority.MONITOR;
+        return com.github.retrooper.packetevents.event.PacketListenerPriority.MONITOR;
     }
     return null;
   }

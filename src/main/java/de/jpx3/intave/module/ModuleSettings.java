@@ -60,8 +60,8 @@ final class ModuleSettings {
       return bootAt(BootSegment.STAGE_10);
     }
 
-    public Builder requireProtocolLib() {
-      return withRequirement(Requirements.protocolLib());
+    public Builder requirePacketEvents() {
+      return withRequirement(Requirements.packetEvents());
     }
 
     public Builder withRequirement(Requirement requirement) {

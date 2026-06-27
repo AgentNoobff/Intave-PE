@@ -1,9 +1,8 @@
 package de.jpx3.intave.module.emulate;
 
-import com.comphenix.protocol.PacketType;
-import com.comphenix.protocol.ProtocolLibrary;
-import com.comphenix.protocol.events.PacketContainer;
-import com.comphenix.protocol.events.PacketEvent;
+import com.github.retrooper.packetevents.event.ProtocolPacketEvent;
+import com.github.retrooper.packetevents.protocol.world.Location;
+import com.github.retrooper.packetevents.wrapper.play.server.WrapperPlayServerEntityTeleport;
 import de.jpx3.intave.block.collision.Collision;
 import de.jpx3.intave.block.shape.BlockShape;
 import de.jpx3.intave.check.CheckConfiguration.CheckSettings;
@@ -15,6 +14,8 @@ import de.jpx3.intave.module.Module;
 import de.jpx3.intave.module.linker.packet.ListenerPriority;
 import de.jpx3.intave.module.linker.packet.PacketSubscription;
 import de.jpx3.intave.packet.PacketSender;
+import de.jpx3.intave.packet.reader.EntityReader;
+import de.jpx3.intave.packet.reader.PacketReaders;
 import de.jpx3.intave.player.Effects;
 import de.jpx3.intave.share.BoundingBox;
 import de.jpx3.intave.share.ClientMath;
@@ -130,14 +131,16 @@ public final class MovementEmulation extends Module {
       if (Math.abs(motionY) == 0 && Math.abs(motionX) < 0.005 && Math.abs(motionZ) < 0.005) {
         movement.speculationEnded = true;
       }
-      PacketContainer packet = ProtocolLibrary.getProtocolManager().createPacket(PacketType.Play.Server.ENTITY_TELEPORT);
+      // PacketEvents re-encodes the position/rotation per protocol version, so we pass real
+      // coordinates and angles instead of the legacy fixed-point ints/angle bytes.
+      Location teleportLocation = new Location(
+        newPositionX, newPositionY, newPositionZ,
+        movement.rotationYaw(), movement.rotationPitch()
+      );
+      WrapperPlayServerEntityTeleport packet = new WrapperPlayServerEntityTeleport(
+        observer.getEntityId(), teleportLocation, false
+      );
       System.out.println("Speculative forward emulation for " + observer.getName() + ": " + motionX + ", " + motionY + ", " + motionZ);
-      packet.getIntegers().write(0, observer.getEntityId());
-      packet.getIntegers().write(1, floor(newPositionX * 32.0));
-      packet.getIntegers().write(2, floor(newPositionY * 32.0));
-      packet.getIntegers().write(3, floor(newPositionZ * 32.0));
-      packet.getBytes().write(0, (byte) (int) (movement.rotationYaw() * 256.0F / 360.0F));
-      packet.getBytes().write(1, (byte) (int) (movement.rotationPitch() * 256.0F / 360.0F));
 
       movement.inReceiveSpeculativePacketRoutine = true;
       for (Entity entity : observer.getNearbyEntities(8, 4, 8)) {
@@ -161,8 +164,8 @@ public final class MovementEmulation extends Module {
   @PacketSubscription(
     packetsIn = {FLYING, POSITION, POSITION_LOOK, LOOK}
   )
-  public void receiveFlyingPacket(PacketEvent event) {
-    User user = userOf(event.getPlayer());
+  public void receiveFlyingPacket(ProtocolPacketEvent event) {
+    User user = userOf((org.bukkit.entity.Player) event.getPlayer());
     MovementMetadata movement = user.meta().movement();
     movement.inSpeculation = false;
   }
@@ -171,13 +174,15 @@ public final class MovementEmulation extends Module {
     packetsOut = {/*ENTITY_TELEPORT, ENTITY_MOVE_LOOK,*/ REL_ENTITY_MOVE, REL_ENTITY_MOVE_LOOK},
     priority = ListenerPriority.LOWEST
   )
-  public void onMovementUpdate(PacketEvent event) {
+  public void onMovementUpdate(ProtocolPacketEvent event) {
     if (enabled) {
       Player player = event.getPlayer();
       User user = userOf(player);
 
-      PacketContainer packet = event.getPacket();
-      Entity entity = EntityLookup.findEntity(player.getWorld(), packet.getIntegers().read(0));
+      EntityReader reader = PacketReaders.readerOf(event);
+      int entityId = reader.entityId();
+      reader.release();
+      Entity entity = EntityLookup.findEntity(player.getWorld(), entityId);
       if (entity instanceof Player) {
         User entityUser = userOf((Player) entity);
         MovementMetadata movement = entityUser.meta().movement();
@@ -187,7 +192,7 @@ public final class MovementEmulation extends Module {
         Map<UUID, Integer> pendingSpeculativeMovementTicks = user.meta().movement().pendingSpeculativeMovementTicks;
         boolean tickOverflow = pendingSpeculativeMovementTicks.getOrDefault(entity.getUniqueId(), 0) > 0;
         if (movement.speculativeTicks > 0 || tickOverflow) {
-          System.out.println("Skipped packet " + packet.getType() + " for " + player.getName() + " because of pending speculative movement ticks.");
+          System.out.println("Skipped packet " + event.getPacketType().getName() + " for " + player.getName() + " because of pending speculative movement ticks.");
           if (tickOverflow) {
             pendingSpeculativeMovementTicks.put(entity.getUniqueId(), pendingSpeculativeMovementTicks.get(entity.getUniqueId()) - 1);
           }

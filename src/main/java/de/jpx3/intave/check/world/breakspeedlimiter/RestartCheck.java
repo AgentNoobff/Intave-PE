@@ -1,18 +1,15 @@
 package de.jpx3.intave.check.world.breakspeedlimiter;
 
-import com.comphenix.protocol.PacketType;
-import com.comphenix.protocol.ProtocolLibrary;
-import com.comphenix.protocol.events.PacketContainer;
-import com.comphenix.protocol.events.PacketEvent;
-import com.comphenix.protocol.wrappers.BlockPosition;
-import com.comphenix.protocol.wrappers.EnumWrappers;
-import com.comphenix.protocol.wrappers.WrappedBlockData;
+import com.github.retrooper.packetevents.event.ProtocolPacketEvent;
+import com.github.retrooper.packetevents.protocol.world.states.WrappedBlockState;
+import com.github.retrooper.packetevents.util.Vector3i;
+import com.github.retrooper.packetevents.wrapper.play.client.WrapperPlayClientPlayerDigging;
+import com.github.retrooper.packetevents.wrapper.play.server.WrapperPlayServerBlockChange;
+import io.github.retrooper.packetevents.util.SpigotConversionUtil;
 import de.jpx3.intave.block.access.VolatileBlockAccess;
-import de.jpx3.intave.block.variant.BlockVariantNativeAccess;
 import de.jpx3.intave.check.MetaCheckPart;
 import de.jpx3.intave.check.world.BreakSpeedLimiter;
 import de.jpx3.intave.executor.Synchronizer;
-import de.jpx3.intave.klass.Lookup;
 import de.jpx3.intave.math.MathHelper;
 import de.jpx3.intave.module.Modules;
 import de.jpx3.intave.module.linker.packet.ListenerPriority;
@@ -22,7 +19,7 @@ import de.jpx3.intave.module.violation.ViolationContext;
 import de.jpx3.intave.module.violation.ViolationProcessor;
 import de.jpx3.intave.packet.PacketSender;
 import de.jpx3.intave.packet.PacketTypes;
-import de.jpx3.intave.packet.converter.BlockPositionConverter;
+import de.jpx3.intave.share.BlockPosition;
 import de.jpx3.intave.user.User;
 import de.jpx3.intave.user.meta.CheckCustomMetadata;
 import de.jpx3.intave.user.meta.ProtocolMetadata;
@@ -44,7 +41,7 @@ public final class RestartCheck extends MetaCheckPart<BreakSpeedLimiter, Restart
 	@PacketSubscription(priority = ListenerPriority.LOWEST, packetsIn = {
 		POSITION, POSITION_LOOK, LOOK, FLYING, VEHICLE_MOVE, CLIENT_TICK_END
 	})
-	public void tickUpdate(PacketEvent event) {
+	public void tickUpdate(ProtocolPacketEvent event) {
 		Player player = event.getPlayer();
 		User user = userOf(player);
 		ProtocolMetadata clientData = user.meta().protocol();
@@ -63,20 +60,20 @@ public final class RestartCheck extends MetaCheckPart<BreakSpeedLimiter, Restart
 	@PacketSubscription(priority = ListenerPriority.LOWEST, packetsIn = {
 		BLOCK_DIG
 	})
-	public void receiveBlockAction(PacketEvent event) {
+	public void receiveBlockAction(ProtocolPacketEvent event) {
 		Player player = event.getPlayer();
 		User user = userOf(player);
 		RestartCheck.BreakSpeedStartMeta meta = metaOf(user);
 		ProtocolMetadata clientData = user.meta().protocol();
 
-		PacketContainer packet = event.getPacket();
-		EnumWrappers.PlayerDigType digType = packet.getPlayerDigTypes().read(0);
+		WrapperPlayClientPlayerDigging digging =
+			new WrapperPlayClientPlayerDigging((com.github.retrooper.packetevents.event.PacketReceiveEvent) event);
+		com.github.retrooper.packetevents.protocol.player.DiggingAction digType = digging.getAction();
+		Vector3i digPosition = digging.getBlockPosition();
 
 		switch (digType) {
-			case START_DESTROY_BLOCK: {
-				BlockPosition blockPosition = event.getPacket().getModifier()
-					.withType(Lookup.serverClass("BlockPosition"), BlockPositionConverter.threadConverter())
-					.read(0);
+			case START_DIGGING: {
+				BlockPosition blockPosition = digPosition == null ? null : new BlockPosition(digPosition);
 				if (isRepeatedActiveStart(meta.breakProcess, meta.targetBlockPosition, blockPosition)) {
 					return;
 				}
@@ -116,7 +113,7 @@ public final class RestartCheck extends MetaCheckPart<BreakSpeedLimiter, Restart
 				meta.targetBlockPosition = blockPosition;
 				break;
 			}
-			case STOP_DESTROY_BLOCK: {
+			case FINISHED_DIGGING: {
 				meta.blockBreakTick = meta.ticks;
 				meta.blockBreakSequence++;
 				meta.breakProcess = false;
@@ -124,15 +121,14 @@ public final class RestartCheck extends MetaCheckPart<BreakSpeedLimiter, Restart
 				if (meta.cancelNextStop) {
 					meta.cancelNextStop = false;
 					event.setCancelled(true);
-					// BlockPosition blockPosition = packet.getBlockPositionModifier().read(0);
-					BlockPosition blockPosition = event.getPacket().getModifier()
-						.withType(Lookup.serverClass("BlockPosition"), BlockPositionConverter.threadConverter())
-						.read(0);
-					refreshBlocksAround(player, blockPosition.toLocation(player.getWorld()));
+					BlockPosition blockPosition = digPosition == null ? null : new BlockPosition(digPosition);
+					if (blockPosition != null) {
+						refreshBlocksAround(player, blockPosition.toLocation(player.getWorld()));
+					}
 				}
 				break;
 			}
-			case ABORT_DESTROY_BLOCK:
+			case CANCELLED_DIGGING:
 				meta.breakProcess = false;
 				meta.targetBlockPosition = null;
 				meta.cancelNextStop = false;
@@ -164,18 +160,13 @@ public final class RestartCheck extends MetaCheckPart<BreakSpeedLimiter, Restart
 	}
 
 	private void refreshBlock(Player player, Location location) {
-		PacketContainer packet = ProtocolLibrary.getProtocolManager().createPacket(PacketType.Play.Server.BLOCK_CHANGE);
 		if (!VolatileBlockAccess.isInLoadedChunk(location.getWorld(), location.getBlockX(), location.getBlockZ())) {
 			return;
 		}
 		Block block = VolatileBlockAccess.blockAccess(location);
-		Object handle = BlockVariantNativeAccess.nativeVariantAccess(block);
-		WrappedBlockData blockData = WrappedBlockData.fromHandle(handle);
-		packet.getBlockData().write(0, blockData);
-
-		BlockPosition position = new BlockPosition(location.getBlockX(), location.getBlockY(), location.getBlockZ());
-		packet.getBlockPositionModifier().write(0, position);
-		PacketSender.sendServerPacket(player, packet);
+		WrappedBlockState blockState = SpigotConversionUtil.fromBukkitMaterialData(block.getState().getData());
+		Vector3i position = new Vector3i(location.getBlockX(), location.getBlockY(), location.getBlockZ());
+		PacketSender.sendServerPacket(player, new WrapperPlayServerBlockChange(position, blockState));
 	}
 
 	public static final class BreakSpeedStartMeta extends CheckCustomMetadata {

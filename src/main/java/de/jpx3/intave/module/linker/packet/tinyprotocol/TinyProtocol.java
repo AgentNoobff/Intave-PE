@@ -77,16 +77,22 @@ public class TinyProtocol {
     this.handlerName = handlerName();
 
     // Prepare existing players
-    registerBukkitEvents();
+    try {
+      registerBukkitEvents();
+    } catch (Exception ignored) {}
 
     try {
       registerChannelHandler();
       registerPlayers(plugin);
-    } catch (IllegalArgumentException exception) {
-      Synchronizer.synchronize(() -> {
-        registerChannelHandler();
-        registerPlayers(plugin);
-      });
+    } catch (Exception exception) {
+      try {
+        Synchronizer.synchronize(() -> {
+          try {
+            registerChannelHandler();
+            registerPlayers(plugin);
+          } catch (Exception ignored) {}
+        });
+      } catch (Exception ignored) {}
     }
   }
 
@@ -315,7 +321,16 @@ public class TinyProtocol {
    * @param player - the player to inject.
    */
   public void injectPlayer(Player player) {
-    injectChannelInternal(getChannel(player)).player = player;
+    Channel channel = getChannel(player);
+    if (channel == null) {
+      return;
+    }
+    channel.eventLoop().execute(() -> {
+      PacketInterceptor interceptor = injectChannelInternal(channel);
+      if (interceptor != null) {
+        interceptor.player = player;
+      }
+    });
   }
 
   /**
@@ -333,27 +348,77 @@ public class TinyProtocol {
    * @param channel - the channel to inject.
    * @return The packet interceptor.
    */
+  /**
+   * Ordered list of known pipeline anchor handlers. We try each one in priority order and use the
+   * first that is actually present in the channel pipeline. This makes TinyProtocol compatible with
+   * PacketEvents 2.x, which replaces the vanilla {@code packet_handler} element with its own
+   * {@code packetevents_decoder} / {@code packetevents_encoder} handlers.
+   */
+  private static final List<String> ANCHOR_CANDIDATES = Arrays.asList(
+      "packet_handler",      // vanilla / CraftBukkit without PacketEvents
+      "packetevents_decoder", // PacketEvents 2.x inbound handler
+      "packetevents_encoder", // PacketEvents 2.x outbound handler (fallback)
+      "decoder"               // raw Netty decoder as last resort
+  );
+
+  /** Returns the first pipeline handler name from {@link #ANCHOR_CANDIDATES} that exists in the given pipeline, or {@code null} if none found. */
+  private static String resolveAnchor(Channel channel) {
+    for (String candidate : ANCHOR_CANDIDATES) {
+      if (channel.pipeline().get(candidate) != null) {
+        return candidate;
+      }
+    }
+    return null;
+  }
+
   private PacketInterceptor injectChannelInternal(Channel channel) {
     try {
       PacketInterceptor interceptor = (PacketInterceptor) channel.pipeline().get(handlerName);
       // Inject our packet interceptor
       if (interceptor == null) {
         interceptor = new PacketInterceptor();
-        try {
-          channel.pipeline().addBefore("packet_handler", handlerName, interceptor);
-        } catch (Exception exception) {
-          IntaveLogger.logger().warn("Failed to find packet_handler pipeline element for " + channel);
-          IntaveLogger.logger().warn("Netty broken?!");
-          exception.printStackTrace();
-//          System.out.println("Available channel: " + channel.pipeline().names());
-//          throw new IllegalStateException("Unable to find packet_handler", exception);
-        }
+        injectWithFallback(channel, interceptor, 0);
         uninjectedChannels.remove(channel);
       }
       return interceptor;
     } catch (IllegalArgumentException exception) {
       // Try again
       return (PacketInterceptor) channel.pipeline().get(handlerName);
+    }
+  }
+
+  private void injectWithFallback(Channel channel, PacketInterceptor interceptor, int attempt) {
+    if (closed || !channel.isOpen()) {
+      return;
+    }
+    String anchor = resolveAnchor(channel);
+    try {
+      if (anchor != null) {
+        channel.pipeline().addBefore(anchor, handlerName, interceptor);
+      } else {
+        if (attempt < 3) {
+          // Defer and retry
+          channel.eventLoop().schedule(() -> injectWithFallback(channel, interceptor, attempt + 1), 50, java.util.concurrent.TimeUnit.MILLISECONDS);
+        } else {
+          // No known anchor found after retries – add at the tail as last resort
+          channel.pipeline().addLast(handlerName, interceptor);
+        }
+      }
+    } catch (NoSuchElementException exception) {
+      if (attempt < 3) {
+        // Defer and retry if the anchor disappeared concurrently
+        channel.eventLoop().schedule(() -> injectWithFallback(channel, interceptor, attempt + 1), 50, java.util.concurrent.TimeUnit.MILLISECONDS);
+      } else {
+        // Final fallback after retries
+        try {
+          channel.pipeline().addLast(handlerName, interceptor);
+        } catch (Exception ex) {
+          IntaveLogger.logger().warn("[TinyProtocol] Failed to inject pipeline handler for " + channel + " even with fallback.");
+        }
+      }
+    } catch (Exception exception) {
+      IntaveLogger.logger().warn("[TinyProtocol] Unexpected error when injecting pipeline handler for " + channel);
+      exception.printStackTrace();
     }
   }
 
@@ -454,6 +519,7 @@ public class TinyProtocol {
       // Intercept channel
       Channel channel = ctx.channel();
       handleLoginStart(channel, msg);
+      Object originalMsg = msg;
       try {
         msg = onPacketInAsync(player, channel, msg);
       } catch (Exception exception) {
@@ -461,11 +527,14 @@ public class TinyProtocol {
       }
       if (msg != null) {
         super.channelRead(ctx, msg);
+      } else {
+        io.netty.util.ReferenceCountUtil.release(originalMsg);
       }
     }
 
     @Override
     public void write(ChannelHandlerContext ctx, Object msg, ChannelPromise promise) throws Exception {
+      Object originalMsg = msg;
       try {
         msg = onPacketOutAsync(player, ctx.channel(), msg);
       } catch (Exception exception) {
@@ -474,6 +543,8 @@ public class TinyProtocol {
       }
       if (msg != null) {
         super.write(ctx, msg, promise);
+      } else {
+        io.netty.util.ReferenceCountUtil.release(originalMsg);
       }
     }
 

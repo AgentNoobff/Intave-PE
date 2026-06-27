@@ -1,8 +1,9 @@
 package de.jpx3.intave.check.world.placementanalysis;
 
-import com.comphenix.protocol.PacketType;
-import com.comphenix.protocol.events.PacketContainer;
-import com.comphenix.protocol.events.PacketEvent;
+import com.github.retrooper.packetevents.event.PacketReceiveEvent;
+import com.github.retrooper.packetevents.event.ProtocolPacketEvent;
+import com.github.retrooper.packetevents.protocol.packettype.PacketType;
+import com.github.retrooper.packetevents.wrapper.play.client.WrapperPlayClientPlayerBlockPlacement;
 import de.jpx3.intave.check.PlayerCheckPart;
 import de.jpx3.intave.check.world.PlacementAnalysis;
 import de.jpx3.intave.cleanup.GarbageCollector;
@@ -48,16 +49,12 @@ public final class Speed extends PlayerCheckPart<PlacementAnalysis> {
 			BLOCK_PLACE, USE_ITEM
 		}
 	)
-	public void receivePlacementPacket(PacketEvent event) {
+	public void receivePlacementPacket(ProtocolPacketEvent event) {
 		Player player = event.getPlayer();
 		User user = userOf(player);
-		PacketContainer packet = event.getPacket();
 
-		if (event.getPacketType() == PacketType.Play.Client.BLOCK_PLACE) {
-			Integer facing = packet.getIntegers().readSafely(0);
-			if (facing == null) {
-				facing = 0;
-			}
+		if (event.getPacketType() == PacketType.Play.Client.PLAYER_BLOCK_PLACEMENT) {
+			int facing = new WrapperPlayClientPlayerBlockPlacement((PacketReceiveEvent) event).getFaceId();
 			if (facing == 255) {
 				lastHardFaultClick = System.currentTimeMillis();
 			}

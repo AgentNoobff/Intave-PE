@@ -1,8 +1,7 @@
 package de.jpx3.intave.check.world.placementanalysis;
 
-import com.comphenix.protocol.events.PacketContainer;
-import com.comphenix.protocol.events.PacketEvent;
-import com.comphenix.protocol.wrappers.BlockPosition;
+import com.github.retrooper.packetevents.event.ProtocolPacketEvent;
+import com.github.retrooper.packetevents.util.Vector3i;
 import de.jpx3.intave.block.access.BlockInteractionAccess;
 import de.jpx3.intave.block.access.VolatileBlockAccess;
 import de.jpx3.intave.check.PlayerCheckPart;
@@ -18,6 +17,7 @@ import de.jpx3.intave.user.User;
 import de.jpx3.intave.user.meta.AbilityMetadata;
 import de.jpx3.intave.user.meta.MovementMetadata;
 import org.bukkit.GameMode;
+import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.entity.Player;
 
@@ -44,15 +44,14 @@ public final class BlockRotation extends PlayerCheckPart<PlacementAnalysis> {
 			BLOCK_PLACE, USE_ITEM
 		}
 	)
-	public void receivePlacementPacket(PacketEvent event) {
+	public void receivePlacementPacket(ProtocolPacketEvent event) {
 		Player player = event.getPlayer();
 		User user = userOf(player);
-		PacketContainer packet = event.getPacket();
 		MovementMetadata movement = user.meta().movement();
 		AbilityMetadata abilities = user.meta().abilities();
 
-		BlockInteractionReader reader = PacketReaders.readerOf(packet);
-		BlockPosition blockPosition = reader.blockPosition();
+		BlockInteractionReader reader = PacketReaders.readerOf(event);
+		Vector3i blockPosition = reader.blockPosition();
 
 		if (blockPosition == null || event.isCancelled() || movement.isInVehicle()) {
 			reader.release();
@@ -65,7 +64,8 @@ public final class BlockRotation extends PlayerCheckPart<PlacementAnalysis> {
 			return;
 		}
 
-		Material clickedType = VolatileBlockAccess.typeAccess(user, blockPosition.toLocation(player.getWorld()));
+		Location clickedLocation = new Location(player.getWorld(), blockPosition.getX(), blockPosition.getY(), blockPosition.getZ());
+		Material clickedType = VolatileBlockAccess.typeAccess(user, clickedLocation);
 		boolean clickableInteraction = BlockInteractionAccess.isClickable(clickedType);
 		Material heldItemType = user.meta().inventory().heldItemType();
 		boolean interactionIsPlacement = heldItemType != Material.AIR && heldItemType.isBlock() && !clickableInteraction && !abilities.inGameMode(GameMode.ADVENTURE);

@@ -16,10 +16,10 @@ public final class Attribute {
 	}
 
 	public static Attribute fromProtocolLib(
-		com.comphenix.protocol.wrappers.WrappedAttribute attribute
+		com.github.retrooper.packetevents.wrapper.play.server.WrapperPlayServerUpdateAttributes.Property attribute
 	) {
-		Attribute wrappedAttribute = new Attribute(attribute.getAttributeKey(), attribute.getBaseValue());
-		wrappedAttribute.baseValue = attribute.getBaseValue();
+		Attribute wrappedAttribute = new Attribute(attribute.getKey(), attribute.getValue());
+		wrappedAttribute.baseValue = attribute.getValue();
 		wrappedAttribute.attributeModifiers.addAll(AttributeModifier.fromProtocolLib(attribute.getModifiers()));
 		return wrappedAttribute;
 	}

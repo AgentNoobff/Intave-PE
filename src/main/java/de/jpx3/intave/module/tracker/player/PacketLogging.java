@@ -1,15 +1,20 @@
 package de.jpx3.intave.module.tracker.player;
 
-import com.comphenix.protocol.PacketType;
-import com.comphenix.protocol.ProtocolLibrary;
-import com.comphenix.protocol.events.*;
+import com.github.retrooper.packetevents.PacketEvents;
+import com.github.retrooper.packetevents.event.PacketListenerAbstract;
+import com.github.retrooper.packetevents.event.PacketListenerCommon;
+import com.github.retrooper.packetevents.event.PacketListenerPriority;
+import com.github.retrooper.packetevents.event.PacketReceiveEvent;
+import com.github.retrooper.packetevents.event.PacketSendEvent;
+import com.github.retrooper.packetevents.event.ProtocolPacketEvent;
+import com.github.retrooper.packetevents.protocol.ConnectionState;
+import com.github.retrooper.packetevents.wrapper.PacketWrapper;
 import de.jpx3.intave.IntavePlugin;
 import de.jpx3.intave.cleanup.GarbageCollector;
 import de.jpx3.intave.cleanup.ShutdownTasks;
 import de.jpx3.intave.module.Module;
-import de.jpx3.intave.share.MovingObjectPosition;
 import de.jpx3.intave.user.User;
-import de.jpx3.intave.user.UserRepository;
+import io.netty.buffer.ByteBuf;
 import org.bukkit.ChatColor;
 import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Player;
@@ -22,7 +27,7 @@ import java.util.function.Supplier;
 
 public class PacketLogging extends Module {
 
-  private final Map<UUID, PacketAdapter> adapterMap = GarbageCollector.watch(new HashMap<>());
+  private final Map<UUID, PacketListenerCommon> adapterMap = GarbageCollector.watch(new HashMap<>());
   private final Map<String, UUID> packetLoggers = GarbageCollector.watch(new HashMap<>());
   private final Map<UUID, PrintStream> packetLogStreams = GarbageCollector.watch(new HashMap<>());
 
@@ -35,15 +40,10 @@ public class PacketLogging extends Module {
     });
   }
 
-  private static final boolean TEMP_PLAYER_CHECK;
-
-  static {
-    TEMP_PLAYER_CHECK = Arrays.stream(PacketEvent.class.getMethods())
-      .anyMatch(method -> method.getName().equalsIgnoreCase("isPlayerTemporary"));
-  }
-
-  private boolean isTemporary(PacketEvent event) {
-    return TEMP_PLAYER_CHECK && event.isPlayerTemporary();
+  // PacketEvents fires send/receive only once the player is a real, fully-connected PLAY-phase
+  // player with a Bukkit handle, which is the equivalent of ProtocolLib's !isPlayerTemporary().
+  private boolean isTemporary(ProtocolPacketEvent event) {
+    return event.getConnectionState() != ConnectionState.PLAY || event.getPlayer() == null;
   }
 
   public void togglePacketLogging(CommandSender sender, Player target) {
@@ -59,8 +59,10 @@ public class PacketLogging extends Module {
       } else {
         sender.sendMessage(IntavePlugin.prefix() + ChatColor.GREEN + "Packetlogging stopped");
       }
-      PacketAdapter remove1 = adapterMap.remove(userId);
-      ProtocolLibrary.getProtocolManager().removePacketListener(remove1);
+      PacketListenerCommon remove1 = adapterMap.remove(userId);
+      if (remove1 != null) {
+        PacketEvents.getAPI().getEventManager().unregisterListener(remove1);
+      }
       packetLoggers.remove(sender.getName());
       PrintStream remove = packetLogStreams.remove(userId);
       if (remove != null) {
@@ -84,39 +86,35 @@ public class PacketLogging extends Module {
       PrintStream printStream = new PrintStream(stream);
 
       UUID finalUserId = userId;
-      List<PacketType> listenerTypes = new ArrayList<>();
-      for (PacketType value : PacketType.values()) {
-        if (value.isSupported()) {
-          listenerTypes.add(value);
-        }
-      }
-      PacketAdapter adapter = new PacketAdapter(IntavePlugin.singletonInstance(), ListenerPriority.MONITOR, listenerTypes, ListenerOptions.SKIP_PLUGIN_VERIFIER) {
+      PacketListenerAbstract adapter = new PacketListenerAbstract(PacketListenerPriority.MONITOR) {
         @Override
-        public void onPacketSending(PacketEvent event) {
+        public void onPacketSend(PacketSendEvent event) {
           if (isTemporary(event)) {
             return;
           }
-          if (event.getPlayer().getUniqueId().equals(finalUserId)) {
+          Player player = event.getPlayer();
+          if (player.getUniqueId().equals(finalUserId)) {
             synchronized (printStream) {
-              printStream.println((System.currentTimeMillis() % 1000) + " <--out-- " + event.getPacketType().name() + (event.isCancelled() ? " (cancelled)" : "") + " " + packetContent(event.getPacket(), UserRepository.userOf(event.getPlayer())));
+              printStream.println((System.currentTimeMillis() % 1000) + " <--out-- " + event.getPacketType().getName() + (event.isCancelled() ? " (cancelled)" : "") + " " + packetContent(event));
             }
           }
         }
 
         @Override
-        public void onPacketReceiving(PacketEvent event) {
+        public void onPacketReceive(PacketReceiveEvent event) {
           if (isTemporary(event)) {
             return;
           }
-          if (event.getPlayer().getUniqueId().equals(finalUserId)) {
+          Player player = event.getPlayer();
+          if (player.getUniqueId().equals(finalUserId)) {
             synchronized (printStream) {
-              printStream.println((System.currentTimeMillis() % 1000) + " --in--> " + event.getPacketType().name() + (event.isCancelled() ? " (cancelled)" : "") + " " + packetContent(event.getPacket(), UserRepository.userOf(event.getPlayer())));
+              printStream.println((System.currentTimeMillis() % 1000) + " --in--> " + event.getPacketType().getName() + (event.isCancelled() ? " (cancelled)" : "") + " " + packetContent(event));
             }
           }
         }
       };
-      adapterMap.put(userId, adapter);
-      ProtocolLibrary.getProtocolManager().addPacketListener(adapter);
+      PacketListenerCommon handle = PacketEvents.getAPI().getEventManager().registerListener(adapter);
+      adapterMap.put(userId, handle);
       packetLoggers.put(sender.getName(), userId);
       packetLogStreams.put(userId, printStream);
     } catch (FileNotFoundException exception) {
@@ -149,165 +147,35 @@ public class PacketLogging extends Module {
     }
   }
 
-  private static String packetContent(PacketContainer packet, User receiver) {
-    if (packet == null) {
-      return "null";
-    }
-    String typeName = packet.getType().name();
-    String[] array = packet.getModifier().getValues().stream()
-      .map(PacketLogging::stringFromType)
-      .filter(s -> !s.isEmpty())
-      .toArray(String[]::new);
-    if (typeName.toUpperCase().contains("ENTITY")) {
-      Integer entityId = packet.getIntegers().readSafely(0);
-      if (entityId != null) {
-        array[0] = receiver.meta().connection().entityBy(entityId) + "";
-      }
-    }
-    StringBuilder extra = new StringBuilder();
-    if (typeName.equalsIgnoreCase("ENTITY_VELOCITY")) {
-      // convert
-      double x = packet.getIntegers().readSafely(1) / 8000.0;
-      double y = packet.getIntegers().readSafely(2) / 8000.0;
-      double z = packet.getIntegers().readSafely(3) / 8000.0;
-      extra.append("x=").append(x).append(", y=").append(y).append(", z=").append(z);
-    }
-    return "{" + String.join(", ", array) + "}" + (extra.length() == 0 ? "" : " [" + extra + "]");
-  }
-
-  private static String stringFromType(Object object) {
-    if (object == null) {
-      return "null";
-    } else if (object instanceof Number) {
-      return object.toString();
-    } else if (object instanceof String) {
-      return "\"" + object + "\"";
-    } else if (object instanceof Boolean) {
-      return object.toString();
-    } else if (object instanceof byte[]) {
-      byte[] bytes = (byte[]) object;
-      if (bytes.length == 0) {
-        return "[]";
-      } else {
-        StringBuilder builder = new StringBuilder();
-        builder.append("[");
-        int limit = Math.min(bytes.length, 40);
-        for (int i = 0; i < limit; i++) {
-          builder.append(bytes[i]);
-          if (i != limit - 1) {
-            builder.append(", ");
-          }
-        }
-        if (bytes.length > 40) {
-          builder.append("...");
-        }
-        builder.append("]");
-        return builder.toString();
-      }
-    } else if (object instanceof int[]) {
-      int[] ints = (int[]) object;
-      if (ints.length == 0) {
-        return "[]";
-      } else {
-        StringBuilder builder = new StringBuilder();
-        builder.append("[");
-        int limit = Math.min(ints.length, 40);
-        for (int i = 0; i < limit; i++) {
-          builder.append(ints[i]);
-          if (i != limit - 1) {
-            builder.append(", ");
-          }
-        }
-        if (ints.length > 40) {
-          builder.append("...");
-        }
-        builder.append("]");
-        return builder.toString();
-      }
-    } else if (object instanceof Object[]) {
-      Object[] objects = (Object[]) object;
-      if (objects.length == 0) {
-        return "[]";
-      } else {
-        StringBuilder builder = new StringBuilder();
-        builder.append("[");
-        int limit = Math.min(objects.length, 40);
-        for (int i = 0; i < limit; i++) {
-          builder.append(stringFromType(objects[i]));
-          if (i != limit - 1) {
-            builder.append(", ");
-          }
-        }
-        if (objects.length > 40) {
-          builder.append("...");
-        }
-        builder.append("]");
-        return builder.toString();
-      }
-    } else if (object instanceof Collection) {
-      Collection<?> collection = (Collection<?>) object;
-      if (collection.isEmpty()) {
-        return "[]";
-      } else {
-        StringBuilder builder = new StringBuilder();
-        builder.append("[");
-        int limit = Math.min(collection.size(), 40);
-        int i = 0;
-        for (Object o : collection) {
-          builder.append(stringFromType(o));
-          if (i != limit - 1) {
-            builder.append(", ");
-          }
-          i++;
-        }
-        if (collection.size() > 40) {
-          builder.append("...");
-        }
-        builder.append("]");
-        return builder.toString();
-      }
-    } else if (object instanceof Map) {
-      Map<?, ?> map = (Map<?, ?>) object;
-      if (map.isEmpty()) {
+  // TODO(pe-migration): ProtocolLib exposed every decoded packet field via StructureModifier, which let
+  // this dump pretty-print each value. PacketEvents has no generic per-type field reflection; without a
+  // typed wrapper per packet we can only surface the raw wire bytes. Dumps the buffer as a byte preview.
+  private static String packetContent(ProtocolPacketEvent event) {
+    try {
+      PacketWrapper<?> wrapper = event instanceof PacketSendEvent
+        ? new PacketWrapper<>((PacketSendEvent) event)
+        : new PacketWrapper<>((PacketReceiveEvent) event);
+      ByteBuf buffer = (ByteBuf) wrapper.getBuffer();
+      if (buffer == null) {
         return "{}";
-      } else {
-        StringBuilder builder = new StringBuilder();
-        builder.append("{");
-        int limit = Math.min(map.size(), 40);
-        int i = 0;
-        for (Map.Entry<?, ?> entry : map.entrySet()) {
-          builder.append(stringFromType(entry.getKey()));
-          builder.append("=");
-          builder.append(stringFromType(entry.getValue()));
-          if (i != limit - 1) {
-            builder.append(", ");
-          }
-          i++;
-        }
-        if (map.size() > 40) {
-          builder.append("...");
-        }
-        builder.append("}");
-        return builder.toString();
       }
-    } else if (object.toString().contains("DataWatcher@")) {
-      //      WrappedDataWatcher watcher = new WrappedDataWatcher(object);
-      //      return "DataWatcher{" + watcher.getWatchableObjects().stream().map(watchableObject -> {
-      //        String value = stringFromType(watchableObject.getValue());
-      //        return watchableObject.getIndex() + "=" + value;
-      //      }).collect(Collectors.joining(", ")) + "}";
-      return "DataWatcher{...}";
-    } else if (object.toString().contains("WatchableObject@")) {
-      //      WrappedDataWatcher.WrappedDataWatcherObject watcherObject = new WrappedDataWatcher.WrappedDataWatcherObject(object);
-      //      return "WatchableObject{" + watcherObject.getIndex() + "=" + stringFromType(watcherObject.getHandle()) + "}";
-      return "WatchableObject{...}";
-    } else if (object.toString().contains("MovingObjectPositionBlock@")) {
-      MovingObjectPosition position = MovingObjectPosition.fromNativeMovingObjectPosition(
-        object
-      );
-      return position.toString();
-    } else {
-      return object.toString();
+      int readable = buffer.readableBytes();
+      int limit = Math.min(readable, 40);
+      StringBuilder builder = new StringBuilder("{bytes=[");
+      int start = buffer.readerIndex();
+      for (int i = 0; i < limit; i++) {
+        builder.append(buffer.getByte(start + i));
+        if (i != limit - 1) {
+          builder.append(", ");
+        }
+      }
+      if (readable > 40) {
+        builder.append("...");
+      }
+      builder.append("]}");
+      return builder.toString();
+    } catch (Exception exception) {
+      return "{error: " + exception.getClass().getSimpleName() + "}";
     }
   }
 

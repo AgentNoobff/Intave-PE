@@ -1,9 +1,9 @@
 package de.jpx3.intave.module.tracker.player;
 
-import com.comphenix.protocol.events.PacketContainer;
-import com.comphenix.protocol.events.PacketEvent;
-import com.comphenix.protocol.reflect.StructureModifier;
-import com.comphenix.protocol.wrappers.WrappedAttribute;
+import com.github.retrooper.packetevents.event.PacketSendEvent;
+import com.github.retrooper.packetevents.event.ProtocolPacketEvent;
+import com.github.retrooper.packetevents.wrapper.play.server.WrapperPlayServerUpdateAttributes;
+import com.github.retrooper.packetevents.wrapper.play.server.WrapperPlayServerUpdateAttributes.Property;
 import de.jpx3.intave.module.Module;
 import de.jpx3.intave.module.linker.packet.ListenerPriority;
 import de.jpx3.intave.module.linker.packet.PacketSubscription;
@@ -28,24 +28,23 @@ public final class AttributeTracker extends Module {
       UPDATE_ATTRIBUTES
     }
   )
-  public void sentAttributes(PacketEvent event) {
+  public void sentAttributes(ProtocolPacketEvent event) {
     Player player = event.getPlayer();
     User user = UserRepository.userOf(player);
-    PacketContainer packet = event.getPacket();
-    if (packet.getIntegers().read(0) == player.getEntityId()) {
-      StructureModifier<List<WrappedAttribute>> mod = packet.getAttributeCollectionModifier();
-      List<WrappedAttribute> attributes = mod.read(0);
-      mod.write(0, attributes);
+    WrapperPlayServerUpdateAttributes packet =
+      new WrapperPlayServerUpdateAttributes((PacketSendEvent) event);
+    if (packet.getEntityId() == player.getEntityId()) {
+      List<Property> attributes = packet.getProperties();
       user.tickFeedback(() -> {
         attributes.forEach(attribute -> receivedAttribute(user, attribute));
       });
     }
   }
 
-  private void receivedAttribute(User user, WrappedAttribute attribute) {
+  private void receivedAttribute(User user, Property attribute) {
     AbilityMetadata abilities = user.meta().abilities();
     MovementMetadata movement = user.meta().movement();
-    String attributeKey = attribute.getAttributeKey();
+    String attributeKey = attribute.getKey();
     if (abilities.findAttribute(attributeKey) != null) {
       Attribute intaveAttribute = Attribute.fromProtocolLib(attribute);
       List<AttributeModifier> intaveAttributes = abilities.modifiersOf(intaveAttribute);
@@ -53,7 +52,7 @@ public final class AttributeTracker extends Module {
       Set<AttributeModifier> serverAttributes = intaveAttribute.modifiers();
       movement.hasSprintSpeed = serverAttributes.contains(MovementMetadata.SPRINTING_MODIFIER);
       intaveAttributes.addAll(new HashSet<>(serverAttributes));
-      abilities.modifyBaseValue(attributeKey, attribute.getBaseValue());
+      abilities.modifyBaseValue(attributeKey, attribute.getValue());
     }
   }
 }

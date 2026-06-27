@@ -1,9 +1,9 @@
 package de.jpx3.intave.check.world.placementanalysis;
 
-import com.comphenix.protocol.PacketType;
-import com.comphenix.protocol.events.PacketContainer;
-import com.comphenix.protocol.events.PacketEvent;
-import com.comphenix.protocol.wrappers.BlockPosition;
+import com.github.retrooper.packetevents.event.CancellableEvent;
+import com.github.retrooper.packetevents.event.ProtocolPacketEvent;
+import com.github.retrooper.packetevents.protocol.packettype.PacketType;
+import com.github.retrooper.packetevents.util.Vector3i;
 import de.jpx3.intave.block.access.BlockInteractionAccess;
 import de.jpx3.intave.block.access.VolatileBlockAccess;
 import de.jpx3.intave.check.PlayerCheckPart;
@@ -25,7 +25,6 @@ import de.jpx3.intave.user.meta.MovementMetadata;
 import org.bukkit.GameMode;
 import org.bukkit.Material;
 import org.bukkit.entity.Player;
-import org.bukkit.event.Cancellable;
 import org.bukkit.util.Vector;
 
 import java.util.ArrayList;
@@ -57,12 +56,12 @@ public class RotationFlick extends PlayerCheckPart<PlacementAnalysis> {
 		}
 	)
 	public void receivePlacementPacket(
-		Player player, PacketContainer packet, BlockInteractionReader reader, Cancellable cancellable
+		Player player, BlockInteractionReader reader, CancellableEvent cancellable
 	) {
 		User user = userOf(player);
 		MovementMetadata movement = user.meta().movement();
 		AbilityMetadata abilities = user.meta().abilities();
-		BlockPosition blockPosition = reader.blockPosition();
+		Vector3i blockPosition = reader.blockPosition();
 
 		if (blockPosition == null || cancellable.isCancelled() || movement.isInVehicle()) {
 			reader.release();
@@ -75,7 +74,7 @@ public class RotationFlick extends PlayerCheckPart<PlacementAnalysis> {
 			return;
 		}
 
-		Material clickedType = VolatileBlockAccess.typeAccess(user, blockPosition.toLocation(player.getWorld()));
+		Material clickedType = VolatileBlockAccess.typeAccess(user, new org.bukkit.Location(player.getWorld(), blockPosition.getX(), blockPosition.getY(), blockPosition.getZ()));
 		boolean clickableInteraction = BlockInteractionAccess.isClickable(clickedType);
 		Material heldItemType = user.meta().inventory().heldItemType();
 		boolean interactionIsPlacement = heldItemType != Material.AIR && heldItemType.isBlock() && !clickableInteraction && !abilities.inGameMode(GameMode.ADVENTURE);
@@ -90,7 +89,7 @@ public class RotationFlick extends PlayerCheckPart<PlacementAnalysis> {
 		while (lastBlocksPlaced.size() > 4 || (!lastBlocksPlaced.isEmpty() && System.currentTimeMillis() - lastPlacement > 5000)) {
 			lastBlocksPlaced.remove(0);
 		}
-		lastBlocksPlaced.add(blockPosition.toVector());
+		lastBlocksPlaced.add(new Vector(blockPosition.getX(), blockPosition.getY(), blockPosition.getZ()));
 
 		placementSpeedHistory.add(lastPlacementDiff);
 		lastPlacement = System.currentTimeMillis();
@@ -200,7 +199,7 @@ public class RotationFlick extends PlayerCheckPart<PlacementAnalysis> {
 			POSITION_LOOK, LOOK, POSITION, FLYING
 		}
 	)
-	public void on(PacketEvent event) {
+	public void on(ProtocolPacketEvent event) {
 		Player player = event.getPlayer();
 		User user = userOf(player);
 		MovementMetadata movementData = user.meta().movement();
@@ -217,7 +216,7 @@ public class RotationFlick extends PlayerCheckPart<PlacementAnalysis> {
 			return;
 		}
 //    player.sendMessage(ChatColor.GRAY + "" + movementData.rotationYaw + " " + (movementData.rotationYaw % 45));
-		if (event.getPacketType() == PacketType.Play.Client.POSITION || event.getPacketType() == PacketType.Play.Client.FLYING) {
+		if (event.getPacketType() == PacketType.Play.Client.PLAYER_POSITION || event.getPacketType() == PacketType.Play.Client.PLAYER_FLYING) {
 			return;
 		}
 //    player.sendMessage(ChatColor.GRAY + "Rotation to " + movementData.rotationPitch + " " + MathHelper.formatDouble(rotationHistogram.mean(), 2) +  " " + MathHelper.formatDouble(rotationHistogram.variance(), 2));

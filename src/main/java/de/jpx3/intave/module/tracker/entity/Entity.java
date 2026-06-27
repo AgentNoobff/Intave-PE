@@ -1,7 +1,13 @@
 package de.jpx3.intave.module.tracker.entity;
 
-import com.comphenix.protocol.events.PacketContainer;
-import com.comphenix.protocol.reflect.StructureModifier;
+import com.github.retrooper.packetevents.event.PacketSendEvent;
+import com.github.retrooper.packetevents.event.ProtocolPacketEvent;
+import com.github.retrooper.packetevents.protocol.packettype.PacketType;
+import com.github.retrooper.packetevents.util.Vector3d;
+import com.github.retrooper.packetevents.wrapper.play.server.WrapperPlayServerEntityPositionSync;
+import com.github.retrooper.packetevents.wrapper.play.server.WrapperPlayServerEntityRelativeMove;
+import com.github.retrooper.packetevents.wrapper.play.server.WrapperPlayServerEntityRelativeMoveAndRotation;
+import com.github.retrooper.packetevents.wrapper.play.server.WrapperPlayServerEntityTeleport;
 import de.jpx3.intave.access.IntaveInternalException;
 import de.jpx3.intave.adapter.MinecraftVersions;
 import de.jpx3.intave.entity.size.HitboxSize;
@@ -9,7 +15,6 @@ import de.jpx3.intave.entity.type.EntityTypeData;
 import de.jpx3.intave.math.Hypot;
 import de.jpx3.intave.module.feedback.FeedbackObserver;
 import de.jpx3.intave.module.feedback.PendingCountingFeedbackObserver;
-import de.jpx3.intave.packet.Relative;
 import de.jpx3.intave.share.*;
 import de.jpx3.intave.user.User;
 import de.jpx3.intave.user.meta.ProtocolMetadata;
@@ -200,33 +205,16 @@ public class Entity {
     }
   }
 
-  public void immediateEntityTeleport(User user, PacketContainer packet) {
-    double newPosX;
-    double newPosY;
-    double newPosZ;
-    if (POSITION_PROCESSING_1_21_3) {
-      PositionMoveRotation posMoveRot = PositionMoveRotation.firstFrom(packet);
-      Set<Relative> flags = Relative.flagsFrom(packet);
-      Position old = immediateServerPosition.filtered(flags);
-      Position change = posMoveRot.position();
-      newPosX = old.getX() + change.getX();
-      newPosY = old.getY() + change.getY();
-      newPosZ = old.getZ() + change.getZ();
-    } else if (POSITION_PROCESSING_1_9) {
-      newPosX = packet.getDoubles().read(0);
-      newPosY = packet.getDoubles().read(1);
-      newPosZ = packet.getDoubles().read(2);
-      immServerPosX = ClientMath.positionLong(newPosX);
-      immServerPosY = ClientMath.positionLong(newPosY);
-      immServerPosZ = ClientMath.positionLong(newPosZ);
-    } else {
-      immServerPosX = packet.getIntegers().read(1);
-      immServerPosY = packet.getIntegers().read(2);
-      immServerPosZ = packet.getIntegers().read(3);
-      newPosX = immServerPosX / 32.0;
-      newPosY = immServerPosY / 32.0;
-      newPosZ = immServerPosZ / 32.0;
-    }
+  public void immediateEntityTeleport(User user, ProtocolPacketEvent event) {
+    // PacketEvents normalizes the teleport position to absolute block coordinates across all versions.
+    // TODO(pe-migration): relative-flag teleports (1.21.2+) are treated as absolute here.
+    Vector3d teleportPosition = new WrapperPlayServerEntityTeleport((PacketSendEvent) event).getPosition();
+    double newPosX = teleportPosition.getX();
+    double newPosY = teleportPosition.getY();
+    double newPosZ = teleportPosition.getZ();
+    immServerPosX = ClientMath.positionLong(newPosX);
+    immServerPosY = ClientMath.positionLong(newPosY);
+    immServerPosZ = ClientMath.positionLong(newPosZ);
     // Always set on 1.16+ as they removed the threshold
     boolean samePosition =
       Math.abs(immediateServerPosition.getX() - newPosX) < 0.03125d &&
@@ -246,38 +234,17 @@ public class Entity {
    * @param user   user which received the packet
    * @param packet contains information about the entity teleportation
    */
-  public void handleEntityTeleport(User user, PacketContainer packet) {
-    double newPosX;
-    double newPosY;
-    double newPosZ;
-    boolean immediateTeleport = false;
-    if (POSITION_PROCESSING_1_21_3) {
-      PositionMoveRotation posMoveRot = PositionMoveRotation.firstFrom(packet);
-      Set<Relative> flags = Relative.flagsFrom(packet);
-      Position old = position.toPosition().filtered(flags);
-      Position change = posMoveRot.position();
-      newPosX = old.getX() + change.getX();
-      newPosY = old.getY() + change.getY();
-      newPosZ = old.getZ() + change.getZ();
-      serverPosX = ClientMath.positionLong(newPosX);
-      serverPosY = ClientMath.positionLong(newPosY);
-      serverPosZ = ClientMath.positionLong(newPosZ);
-      immediateTeleport = squaredDistanceTo(newPosX, newPosY, newPosZ) > 4096;
-    } else if (POSITION_PROCESSING_1_9) {
-      newPosX = packet.getDoubles().read(0);
-      newPosY = packet.getDoubles().read(1);
-      newPosZ = packet.getDoubles().read(2);
-      serverPosX = ClientMath.positionLong(newPosX);
-      serverPosY = ClientMath.positionLong(newPosY);
-      serverPosZ = ClientMath.positionLong(newPosZ);
-    } else {
-      serverPosX = packet.getIntegers().read(1);
-      serverPosY = packet.getIntegers().read(2);
-      serverPosZ = packet.getIntegers().read(3);
-      newPosX = serverPosX / 32.0;
-      newPosY = serverPosY / 32.0;
-      newPosZ = serverPosZ / 32.0;
-    }
+  public void handleEntityTeleport(User user, ProtocolPacketEvent event) {
+    // PacketEvents normalizes the teleport position to absolute block coordinates across all versions.
+    // TODO(pe-migration): relative-flag teleports (1.21.2+) are treated as absolute here.
+    Vector3d teleportPosition = new WrapperPlayServerEntityTeleport((PacketSendEvent) event).getPosition();
+    double newPosX = teleportPosition.getX();
+    double newPosY = teleportPosition.getY();
+    double newPosZ = teleportPosition.getZ();
+    serverPosX = ClientMath.positionLong(newPosX);
+    serverPosY = ClientMath.positionLong(newPosY);
+    serverPosZ = ClientMath.positionLong(newPosZ);
+    boolean immediateTeleport = POSITION_PROCESSING_1_21_3 && squaredDistanceTo(newPosX, newPosY, newPosZ) > 4096;
 
     ProtocolMetadata protocol = user.meta().protocol();
     protocol.lastEntityId = entityId;
@@ -301,7 +268,7 @@ public class Entity {
       }
       pushDebug("TP(Set lerp target) to " + formatDouble(newPosX, 3) + " " + formatDouble(newPosY, 3) + " " + formatDouble(newPosZ, 3));
     }
-    double alternativeNewPosY = (double) this.serverPosY / 32d + 0.015625d;
+    double alternativeNewPosY = newPosY + 0.015625d;
     if (Math.abs(position.posX - newPosX) < 0.03125d &&
       Math.abs(alternativePosition.posY - alternativeNewPosY) < 0.015625d &&
       Math.abs(position.posZ - newPosZ) < 0.03125d) {
@@ -311,15 +278,12 @@ public class Entity {
     }
   }
 
-  public void handleEntityPositionSync(User user, PacketContainer packet) {
-    double newPosX;
-    double newPosY;
-    double newPosZ;
-    PositionMoveRotation posMoveRot = PositionMoveRotation.firstFrom(packet);
-    Position position = posMoveRot.position();
-    newPosX = position.getX();
-    newPosY = position.getY();
-    newPosZ = position.getZ();
+  public void handleEntityPositionSync(User user, ProtocolPacketEvent event) {
+    Vector3d syncPosition = new WrapperPlayServerEntityPositionSync((PacketSendEvent) event).getValues().getPosition();
+    Position position = new Position(syncPosition.getX(), syncPosition.getY(), syncPosition.getZ());
+    double newPosX = position.getX();
+    double newPosY = position.getY();
+    double newPosZ = position.getZ();
     codec.setBase(position);
     serverPosX = ClientMath.positionLong(newPosX);
     serverPosY = ClientMath.positionLong(newPosY);
@@ -340,15 +304,12 @@ public class Entity {
     }
   }
 
-  public void immediateEntityPositionSync(PacketContainer packet) {
-    double newPosX;
-    double newPosY;
-    double newPosZ;
-    PositionMoveRotation posMoveRot = PositionMoveRotation.firstFrom(packet);
-    Position position = posMoveRot.position();
-    newPosX = position.getX();
-    newPosY = position.getY();
-    newPosZ = position.getZ();
+  public void immediateEntityPositionSync(ProtocolPacketEvent event) {
+    Vector3d syncPosition = new WrapperPlayServerEntityPositionSync((PacketSendEvent) event).getValues().getPosition();
+    Position position = new Position(syncPosition.getX(), syncPosition.getY(), syncPosition.getZ());
+    double newPosX = position.getX();
+    double newPosY = position.getY();
+    double newPosZ = position.getZ();
     immediateCodec.setBase(position);
     immediateServerPosition.setX(newPosX);
     immediateServerPosition.setY(newPosY);
@@ -362,38 +323,29 @@ public class Entity {
     return d * d + e * e + f * f;
   }
 
-  public void immediateEntityMovement(PacketContainer packet) {
-    double newPosX;
-    double newPosY;
-    double newPosZ;
-    if (POSITION_PROCESSING_1_14) {
-      StructureModifier<Short> shorts = packet.getShorts();
-      this.immServerPosX += shorts.readSafely(0);
-      this.immServerPosY += shorts.readSafely(1);
-      this.immServerPosZ += shorts.readSafely(2);
-      newPosX = (double) immServerPosX / 4096d;
-      newPosY = (double) immServerPosY / 4096d;
-      newPosZ = (double) immServerPosZ / 4096d;
-    } else if (POSITION_PROCESSING_1_9) {
-      StructureModifier<Integer> integers = packet.getIntegers();
-      this.immServerPosX += integers.readSafely(1);
-      this.immServerPosY += integers.readSafely(2);
-      this.immServerPosZ += integers.readSafely(3);
-      newPosX = (double) immServerPosX / 4096d;
-      newPosY = (double) immServerPosY / 4096d;
-      newPosZ = (double) immServerPosZ / 4096d;
-    } else {
-      StructureModifier<Byte> bytes = packet.getBytes();
-      this.immServerPosX += bytes.readSafely(0);
-      this.immServerPosY += bytes.readSafely(1);
-      this.immServerPosZ += bytes.readSafely(2);
-      newPosX = (double) immServerPosX / 32d;
-      newPosY = (double) immServerPosY / 32d;
-      newPosZ = (double) immServerPosZ / 32d;
+  // PacketEvents reports relative-move deltas as block doubles for every version; positionLong scales
+  // them back into the shared 1/4096-block accumulator (exact for the 1.8 1/32 and 1.9+ 1/4096 wire
+  // encodings alike).
+  private Vector3d relativeMoveDelta(ProtocolPacketEvent event) {
+    if (event.getPacketType() == PacketType.Play.Server.ENTITY_RELATIVE_MOVE_AND_ROTATION) {
+      WrapperPlayServerEntityRelativeMoveAndRotation wrapper = new WrapperPlayServerEntityRelativeMoveAndRotation((PacketSendEvent) event);
+      return new Vector3d(wrapper.getDeltaX(), wrapper.getDeltaY(), wrapper.getDeltaZ());
+    } else if (event.getPacketType() == PacketType.Play.Server.ENTITY_RELATIVE_MOVE) {
+      WrapperPlayServerEntityRelativeMove wrapper = new WrapperPlayServerEntityRelativeMove((PacketSendEvent) event);
+      return new Vector3d(wrapper.getDeltaX(), wrapper.getDeltaY(), wrapper.getDeltaZ());
     }
-    immediateServerPosition.setX(newPosX);
-    immediateServerPosition.setY(newPosY);
-    immediateServerPosition.setZ(newPosZ);
+    // ENTITY_ROTATION (look only) carries no positional delta.
+    return new Vector3d(0, 0, 0);
+  }
+
+  public void immediateEntityMovement(ProtocolPacketEvent event) {
+    Vector3d delta = relativeMoveDelta(event);
+    this.immServerPosX += ClientMath.positionLong(delta.getX());
+    this.immServerPosY += ClientMath.positionLong(delta.getY());
+    this.immServerPosZ += ClientMath.positionLong(delta.getZ());
+    immediateServerPosition.setX((double) immServerPosX / 4096d);
+    immediateServerPosition.setY((double) immServerPosY / 4096d);
+    immediateServerPosition.setZ((double) immServerPosZ / 4096d);
   }
 
   /**
@@ -401,40 +353,15 @@ public class Entity {
    *
    * @param packet contains information about the entity movement
    */
-  public void handleEntityMovement(User user, PacketContainer packet, boolean sync) {
-    double newPosX;
-    double newPosY;
-    double alternativeNewPosY;
-    double newPosZ;
-
-    if (POSITION_PROCESSING_1_14) {
-      StructureModifier<Short> shorts = packet.getShorts();
-      this.serverPosX += shorts.readSafely(0);
-      this.serverPosY += shorts.readSafely(1);
-      this.serverPosZ += shorts.readSafely(2);
-      newPosX = (double) serverPosX / 4096d;
-      newPosY = (double) serverPosY / 4096d;
-      alternativeNewPosY = newPosY;
-      newPosZ = (double) serverPosZ / 4096d;
-    } else if (POSITION_PROCESSING_1_9) {
-      StructureModifier<Integer> integers = packet.getIntegers();
-      this.serverPosX += integers.readSafely(1);
-      this.serverPosY += integers.readSafely(2);
-      this.serverPosZ += integers.readSafely(3);
-      newPosX = (double) serverPosX / 4096d;
-      newPosY = (double) serverPosY / 4096d;
-      alternativeNewPosY = newPosY;
-      newPosZ = (double) serverPosZ / 4096d;
-    } else {
-      StructureModifier<Byte> bytes = packet.getBytes();
-      this.serverPosX += bytes.readSafely(0);
-      this.serverPosY += bytes.readSafely(1);
-      this.serverPosZ += bytes.readSafely(2);
-      newPosX = (double) serverPosX / 32d;
-      newPosY = (double) serverPosY / 32d;
-      alternativeNewPosY = (double) serverPosY / 32d;
-      newPosZ = (double) serverPosZ / 32d;
-    }
+  public void handleEntityMovement(User user, ProtocolPacketEvent event, boolean sync) {
+    Vector3d delta = relativeMoveDelta(event);
+    this.serverPosX += ClientMath.positionLong(delta.getX());
+    this.serverPosY += ClientMath.positionLong(delta.getY());
+    this.serverPosZ += ClientMath.positionLong(delta.getZ());
+    double newPosX = (double) serverPosX / 4096d;
+    double newPosY = (double) serverPosY / 4096d;
+    double alternativeNewPosY = newPosY;
+    double newPosZ = (double) serverPosZ / 4096d;
 
     // 3 is used to interpolate the entity position in new client ticks
     setPositionAndRotationEntityLiving(newPosX, newPosY, newPosZ, 3);

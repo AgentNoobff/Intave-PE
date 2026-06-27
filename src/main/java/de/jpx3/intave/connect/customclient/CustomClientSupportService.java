@@ -1,9 +1,7 @@
 package de.jpx3.intave.connect.customclient;
 
-import com.comphenix.protocol.PacketType;
-import com.comphenix.protocol.ProtocolLibrary;
-import com.comphenix.protocol.events.PacketContainer;
-import com.comphenix.protocol.wrappers.MinecraftKey;
+import com.github.retrooper.packetevents.resources.ResourceLocation;
+import com.github.retrooper.packetevents.wrapper.play.server.WrapperPlayServerPluginMessage;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonParser;
 import de.jpx3.intave.IntaveLogger;
@@ -12,7 +10,6 @@ import de.jpx3.intave.adapter.MinecraftVersions;
 import de.jpx3.intave.check.EventProcessor;
 import de.jpx3.intave.connect.sibyl.LabyModChannelHelper;
 import de.jpx3.intave.executor.Synchronizer;
-import de.jpx3.intave.klass.Lookup;
 import de.jpx3.intave.module.Modules;
 import de.jpx3.intave.module.linker.packet.PacketSubscription;
 import de.jpx3.intave.packet.PacketSender;
@@ -21,7 +18,6 @@ import de.jpx3.intave.user.User;
 import de.jpx3.intave.user.UserRepository;
 import de.jpx3.intave.user.meta.ConnectionMetadata;
 import io.netty.buffer.ByteBuf;
-import io.netty.buffer.Unpooled;
 import org.bukkit.Bukkit;
 import org.bukkit.entity.Player;
 
@@ -82,20 +78,13 @@ public final class CustomClientSupportService implements EventProcessor {
   }
 
   private void sendCustomDataPacket(Player player, String channel, String data, String prefix, String key) {
-    PacketContainer packetContainer = ProtocolLibrary.getProtocolManager().createPacket(PacketType.Play.Server.CUSTOM_PAYLOAD);
+    byte[] bytesToSend = LabyModChannelHelper.getBytesToSend(channel, data);
+    WrapperPlayServerPluginMessage packet;
     if (MinecraftVersions.VER1_13_0.atOrAbove()) {
-      packetContainer.getMinecraftKeys().write(0, new MinecraftKey(prefix, key));
+      packet = new WrapperPlayServerPluginMessage(new ResourceLocation(prefix, key), bytesToSend);
     } else {
-      packetContainer.getStrings().write(0, prefix + ":" + key);
+      packet = new WrapperPlayServerPluginMessage(prefix + ":" + key, bytesToSend);
     }
-    try {
-      //noinspection unchecked
-      Class<Object> packetDataSerializerClass = (Class<Object>) Lookup.serverClass("PacketDataSerializer");
-      Object packetDataSerializer = packetDataSerializerClass.getConstructor(ByteBuf.class).newInstance(Unpooled.wrappedBuffer(LabyModChannelHelper.getBytesToSend(channel, data)));
-      packetContainer.getSpecificModifier(packetDataSerializerClass).write(0, packetDataSerializer);
-      Synchronizer.synchronize(() -> PacketSender.sendServerPacket(player, packetContainer));
-    } catch (Exception exception) {
-      exception.printStackTrace();
-    }
+    Synchronizer.synchronize(() -> PacketSender.sendServerPacket(player, packet));
   }
 }

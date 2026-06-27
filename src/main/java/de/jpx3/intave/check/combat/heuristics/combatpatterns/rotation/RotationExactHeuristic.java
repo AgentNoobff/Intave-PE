@@ -1,6 +1,6 @@
 package de.jpx3.intave.check.combat.heuristics.combatpatterns.rotation;
 
-import com.comphenix.protocol.events.PacketEvent;
+import com.github.retrooper.packetevents.event.ProtocolPacketEvent;
 import de.jpx3.intave.check.combat.Heuristics;
 import de.jpx3.intave.check.combat.heuristics.ClassicHeuristic;
 import de.jpx3.intave.check.combat.heuristics.HeuristicsClassicType;
@@ -32,7 +32,7 @@ public class RotationExactHeuristic extends ClassicHeuristic<RotationExactHeuris
       LOOK, POSITION_LOOK
     }
   )
-  public void receiveMovement(PacketEvent event) {
+  public void receiveMovement(ProtocolPacketEvent event) {
     Player player = event.getPlayer();
     User user = userOf(player);
     MetadataBundle meta = user.meta();

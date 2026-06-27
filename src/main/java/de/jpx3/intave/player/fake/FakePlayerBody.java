@@ -1,22 +1,37 @@
 package de.jpx3.intave.player.fake;
 
-import com.comphenix.protocol.PacketType;
-import com.comphenix.protocol.ProtocolLibrary;
-import com.comphenix.protocol.events.PacketContainer;
-import com.comphenix.protocol.wrappers.*;
+import com.github.retrooper.packetevents.protocol.entity.data.EntityData;
+import com.github.retrooper.packetevents.protocol.player.GameMode;
+import com.github.retrooper.packetevents.protocol.player.UserProfile;
+import com.github.retrooper.packetevents.protocol.sound.Sound;
+import com.github.retrooper.packetevents.protocol.sound.SoundCategory;
+import com.github.retrooper.packetevents.protocol.sound.Sounds;
+import com.github.retrooper.packetevents.util.Vector3d;
+import com.github.retrooper.packetevents.wrapper.PacketWrapper;
+import com.github.retrooper.packetevents.wrapper.play.server.WrapperPlayServerDestroyEntities;
+import com.github.retrooper.packetevents.wrapper.play.server.WrapperPlayServerEntityHeadLook;
+import com.github.retrooper.packetevents.wrapper.play.server.WrapperPlayServerEntityRelativeMove;
+import com.github.retrooper.packetevents.wrapper.play.server.WrapperPlayServerEntityRelativeMoveAndRotation;
+import com.github.retrooper.packetevents.wrapper.play.server.WrapperPlayServerEntityRotation;
+import com.github.retrooper.packetevents.wrapper.play.server.WrapperPlayServerEntityTeleport;
+import com.github.retrooper.packetevents.wrapper.play.server.WrapperPlayServerPlayerInfo;
+import com.github.retrooper.packetevents.wrapper.play.server.WrapperPlayServerPlayerInfoUpdate;
+import com.github.retrooper.packetevents.wrapper.play.server.WrapperPlayServerSoundEffect;
+import com.github.retrooper.packetevents.wrapper.play.server.WrapperPlayServerSpawnPlayer;
 import com.google.common.base.Preconditions;
 import de.jpx3.intave.adapter.MinecraftVersions;
 import de.jpx3.intave.block.access.VolatileBlockAccess;
 import de.jpx3.intave.block.type.BlockTypeAccess;
 import de.jpx3.intave.executor.Synchronizer;
 import de.jpx3.intave.packet.PacketSender;
-import de.jpx3.intave.share.ClientMath;
+import net.kyori.adventure.text.Component;
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
-import org.bukkit.Sound;
 import org.bukkit.block.Block;
 import org.bukkit.entity.Player;
 
+import java.util.ArrayList;
+import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -24,14 +39,13 @@ import java.util.Map;
 import static de.jpx3.intave.player.fake.FakePlayerAttribute.*;
 import static de.jpx3.intave.player.fake.MetadataAccess.metadataAccept;
 import static de.jpx3.intave.player.fake.MetadataAccess.updateVisibility;
-import static de.jpx3.intave.player.fake.RandomStringGenerator.randomString;
 import static de.jpx3.intave.player.fake.ScoreboardAccessor.sendScoreboard;
 import static de.jpx3.intave.player.fake.TablistMutator.addToTabList;
 import static de.jpx3.intave.player.fake.TablistMutator.removeFromTabList;
 
 public abstract class FakePlayerBody extends FakePlayerIdentity {
   private static final boolean POSITION_PROCESSING_1_9 = MinecraftVersions.VER1_9_0.atOrAbove();
-  private static final boolean POSITION_PROCESSING_1_14 = MinecraftVersions.VER1_14_0.atOrAbove();
+  private static final boolean MODERN_PLAYER_INFO = MinecraftVersions.VER1_19_3.atOrAbove();
 
   private static final Map<Integer, Object> METADATA = new HashMap<Integer, Object>() {{
     // Entity
@@ -59,7 +73,7 @@ public abstract class FakePlayerBody extends FakePlayerIdentity {
   protected FakePlayerBody(
     Player observer,
     int entityId, int attributes,
-    WrappedGameProfile profile,
+    UserProfile profile,
     String listedPrefix, String prefix
   ) {
     super(entityId, profile);
@@ -70,32 +84,26 @@ public abstract class FakePlayerBody extends FakePlayerIdentity {
   }
 
   protected void spawn(Location spawn) {
-    boolean includeMetadata = !MinecraftVersions.VER1_5_0.atOrAbove();
-    PacketContainer spawnPacket = create(PacketType.Play.Server.NAMED_ENTITY_SPAWN);
-    WrappedGameProfile profile = profile();
-    WrappedDataWatcher dataWatcher = dataWatcher();
-    spawnPacket.getModifier()
-      .write(0, identifier())
-      .write(1, profile.getUUID())
-      .write(5, compressRotation(spawn.getYaw()))
-      .write(6, compressRotation(spawn.getPitch()));
-    pushLocationToPacket(spawnPacket, spawn, 0);
-    if (!POSITION_PROCESSING_1_9) {
-      spawnPacket.getModifier().write(7, 0);
-    }
+    UserProfile profile = profile();
+    List<EntityData<?>> dataWatcher = dataWatcher();
+    dataWatcher.clear();
     METADATA.forEach((index, object) -> metadataAccept(dataWatcher, index, object.getClass(), object));
-    if (includeMetadata) {
-      spawnPacket.getDataWatcherModifier().write(0, dataWatcher);
-    }
+
     String tabListName = listedPrefix + profile.getName();
     addToTabList(observer, profile, tabListName);
+
+    com.github.retrooper.packetevents.protocol.world.Location peLocation =
+      new com.github.retrooper.packetevents.protocol.world.Location(
+        spawn.getX(), spawn.getY(), spawn.getZ(), spawn.getYaw(), spawn.getPitch()
+      );
+    WrapperPlayServerSpawnPlayer spawnPacket = new WrapperPlayServerSpawnPlayer(
+      identifier(),
+      profile.getUUID(),
+      peLocation,
+      new ArrayList<>(dataWatcher)
+    );
     send(spawnPacket);
-    if (!includeMetadata) {
-      PacketContainer metadata = create(PacketType.Play.Server.ENTITY_METADATA);
-      metadata.getIntegers().write(0, identifier());
-      metadata.getWatchableCollectionModifier().write(0, dataWatcher.getWatchableObjects());
-      send(metadata);
-    }
+
     if (!hasAttribute(attributes, IN_TABLIST)) {
       removeFromTabList(observer, profile());
     }
@@ -108,9 +116,7 @@ public abstract class FakePlayerBody extends FakePlayerIdentity {
     if (hasAttribute(attributes, IN_TABLIST)) {
       TablistMutator.removeFromTabList(observer(), profile());
     }
-    PacketContainer packet = create(PacketType.Play.Server.ENTITY_DESTROY);
-    packet.getIntegerArrays().write(0, new int[]{identifier()});
-    send(packet);
+    send(new WrapperPlayServerDestroyEntities(identifier()));
   }
 
   public void respawn(Location location) {
@@ -137,62 +143,24 @@ public abstract class FakePlayerBody extends FakePlayerIdentity {
     boolean move = safeDistance(to, from) != 0;
     boolean look = rotationChange(to, from);
 
-    PacketContainer packet = null;
+    PacketWrapper<?> packet = null;
+    double deltaX = to.getX() - from.getX();
+    double deltaY = to.getY() - from.getY();
+    double deltaZ = to.getZ() - from.getZ();
     if (move && look) {
-      packet = create(PacketType.Play.Server.REL_ENTITY_MOVE_LOOK);
-      packet.getIntegers().write(0, identifier());
-      if (POSITION_PROCESSING_1_14) {
-        packet.getShorts()
-          .write(0, (short) ((to.getX() - from.getX()) * 4096d))
-          .write(1, (short) ((to.getY() - from.getY()) * 4096d))
-          .write(2, (short) ((to.getZ() - from.getZ()) * 4096d));
-        packet.getBytes()
-          .write(0, compressRotation(to.getYaw()))
-          .write(1, compressRotation(to.getPitch()));
-      } else if (POSITION_PROCESSING_1_9) {
-        packet.getIntegers()
-          .write(1, (int) ((to.getX() - from.getX()) * 4096.0D))
-          .write(2, (int) ((to.getY() - from.getY()) * 4096.0D))
-          .write(3, (int) ((to.getZ() - from.getZ()) * 4096.0D));
-        packet.getBytes()
-          .write(0, compressRotation(to.getYaw()))
-          .write(1, compressRotation(to.getPitch()));
-      } else {
-        packet.getBytes()
-          .write(0, compressAxisUpdate(to.getX(), from.getX()))
-          .write(1, compressAxisUpdate(to.getY(), from.getY()))
-          .write(2, compressAxisUpdate(to.getZ(), from.getZ()))
-          .write(3, compressRotation(to.getYaw()))
-          .write(4, compressRotation(to.getPitch()));
-      }
+      packet = new WrapperPlayServerEntityRelativeMoveAndRotation(
+        identifier(), deltaX, deltaY, deltaZ, to.getYaw(), to.getPitch(), onGround
+      );
     } else if (move) {
-      packet = create(PacketType.Play.Server.REL_ENTITY_MOVE);
-      packet.getIntegers().write(0, identifier());
-      if (POSITION_PROCESSING_1_14) {
-        packet.getShorts()
-          .write(0, (short) ((to.getX() - from.getX()) * 4096d))
-          .write(1, (short) ((to.getY() - from.getY()) * 4096d))
-          .write(2, (short) ((to.getZ() - from.getZ()) * 4096d));
-      } else if (POSITION_PROCESSING_1_9) {
-        packet.getIntegers()
-          .write(1, (int) ((to.getX() - from.getX()) * 4096.0D))
-          .write(2, (int) ((to.getY() - from.getY()) * 4096.0D))
-          .write(3, (int) ((to.getZ() - from.getZ()) * 4096.0D));
-      } else {
-        packet.getBytes()
-          .write(0, compressAxisUpdate(to.getX(), from.getX()))
-          .write(1, compressAxisUpdate(to.getY(), from.getY()))
-          .write(2, compressAxisUpdate(to.getZ(), from.getZ()));
-      }
+      packet = new WrapperPlayServerEntityRelativeMove(
+        identifier(), deltaX, deltaY, deltaZ, onGround
+      );
     } else if (look) {
-      packet = create(PacketType.Play.Server.ENTITY_LOOK);
-      packet.getIntegers().write(0, identifier());
-      packet.getBytes()
-        .write(0, compressRotation(to.getYaw()))
-        .write(1, compressRotation(to.getPitch()));
+      packet = new WrapperPlayServerEntityRotation(
+        identifier(), to.getYaw(), to.getPitch(), onGround
+      );
     }
     if (packet != null) {
-      packet.getBooleans().write(0, onGround);
       send(packet);
     }
     if (look) {
@@ -208,10 +176,7 @@ public abstract class FakePlayerBody extends FakePlayerIdentity {
   }
 
   private void rotationUpdate(float yaw) {
-    PacketContainer packet = create(PacketType.Play.Server.ENTITY_HEAD_ROTATION);
-    packet.getIntegers().write(0, identifier());
-    packet.getBytes().write(0, compressRotation(yaw));
-    send(packet);
+    send(new WrapperPlayServerEntityHeadLook(identifier(), yaw));
   }
 
   private static boolean rotationChange(Location location1, Location location2) {
@@ -220,126 +185,77 @@ public abstract class FakePlayerBody extends FakePlayerIdentity {
     return !equalYaw || !equalPitch;
   }
 
-  private static final double COORDINATE_COMPRESSION_FACTOR = 32.0D;
-
-  private byte compressAxisUpdate(double coordinateTo, double coordinateFrom) {
-    double fixedTo = ClientMath.floor(coordinateTo * COORDINATE_COMPRESSION_FACTOR);
-    double fixedFrom = ClientMath.floor(coordinateFrom * COORDINATE_COMPRESSION_FACTOR);
-    return (byte) (fixedTo - fixedFrom);
-  }
-
   public void movementTeleport(Location to, boolean onGround) {
     Preconditions.checkNotNull(to);
-    float rotationYaw = to.getYaw();
-    float rotationPitch = to.getPitch();
-    PacketContainer packet = create(PacketType.Play.Server.ENTITY_TELEPORT);
-    packet.getIntegers().write(0, identifier());
-    pushLocationToPacket(packet, to, 0);
-    packet.getBytes()
-      .write(0, compressRotation(rotationYaw))
-      .write(1, compressRotation(rotationPitch));
-    packet.getBooleans().write(0, onGround);
-    send(packet);
+    com.github.retrooper.packetevents.protocol.world.Location peLocation =
+      new com.github.retrooper.packetevents.protocol.world.Location(
+        to.getX(), to.getY(), to.getZ(), to.getYaw(), to.getPitch()
+      );
+    send(new WrapperPlayServerEntityTeleport(identifier(), peLocation, onGround));
   }
-
-  private void pushLocationToPacket(PacketContainer packet, Location location, int offset) {
-    if (POSITION_PROCESSING_1_9) {
-      packet.getDoubles()
-        .write(offset + 0, location.getX())
-        .write(offset + 1, location.getY())
-        .write(offset + 2, location.getZ());
-    } else {
-      packet.getIntegers()
-        .write(offset + 1, compressCoordinate(location.getX()))
-        .write(offset + 2, compressCoordinate(location.getY()))
-        .write(offset + 3, compressCoordinate(location.getZ()));
-    }
-  }
-
-  private static final float FIX_CONVERT_FACTOR = 256.0F / 360.0F;
-
-  private byte compressRotation(float f) {
-    return (byte) (f * FIX_CONVERT_FACTOR);
-  }
-
-  private int compressCoordinate(double coordinate) {
-    return (int) Math.floor(coordinate * COORDINATE_COMPRESSION_FACTOR);
-  }
-
-  private static final int SOUND_CONVERT_FACTOR = 8;
 
   public void makeWalkingSound(Location location) {
-    PacketContainer packet = create(PacketType.Play.Server.NAMED_SOUND_EFFECT);
-
-    // Set SoundCategory and SoundEffect when on 1.9 or higher
-    if (MinecraftVersions.VER1_9_0.atOrAbove()) {
-      packet.getSoundEffects().write(0, Sound.BLOCK_STONE_STEP);
-      packet.getSoundCategories().write(0, EnumWrappers.SoundCategory.PLAYERS);
-    } else {
-      packet.getStrings().write(0, walkingSoundAt(location));
-    }
-    packet.getIntegers()
-      .write(0, (int) (location.getX() * SOUND_CONVERT_FACTOR))
-      .write(1, (int) (location.getY() * SOUND_CONVERT_FACTOR))
-      .write(2, (int) (location.getZ() * SOUND_CONVERT_FACTOR));
-    if (MinecraftVersions.VER1_10_0.atOrAbove()) {
-      packet.getFloat().write(0, 1f).write(1, 0.15f);
-    } else {
-      packet.getIntegers().write(3, 63);
-      packet.getFloat().write(0, 0.15f);
-    }
+    Sound sound = walkingSoundAt(location);
+    float volume = MinecraftVersions.VER1_10_0.atOrAbove() ? 1f : 0.15f;
+    float pitch = MinecraftVersions.VER1_10_0.atOrAbove() ? 0.15f : 1f;
+    WrapperPlayServerSoundEffect packet = new WrapperPlayServerSoundEffect(
+      sound,
+      SoundCategory.PLAYER,
+      new Vector3d(location.getX(), location.getY(), location.getZ()),
+      volume,
+      pitch
+    );
     send(packet);
   }
 
-  private String walkingSoundAt(Location location) {
+  private Sound walkingSoundAt(Location location) {
     Block block = VolatileBlockAccess.blockAccess(location.clone().add(0.0, -1.0, 0.0));
     switch (BlockTypeAccess.typeAccess(block)) {
       case GRASS: {
-        return "step.grass";
+        return Sounds.BLOCK_GRASS_STEP;
       }
       case GRAVEL: {
-        return "step.gravel";
+        return Sounds.BLOCK_GRAVEL_STEP;
       }
       case WOOD: {
-        return "step.wood";
+        return Sounds.BLOCK_WOOD_STEP;
       }
       default:
-        return "step.stone";
+        return Sounds.BLOCK_STONE_STEP;
     }
   }
 
   public void applyDisplayName() {
-    PacketContainer scoreboardCreatePacket = create(PacketType.Play.Server.SCOREBOARD_TEAM);
-    String teamName = randomString();
-    scoreboardCreatePacket.getStrings()
-      .write(0, teamName)
-      .write(2, prefix);
-    send(scoreboardCreatePacket);
-    sendScoreboard(observer, teamName, profile(), hasAttribute(attributes, INVISIBLE));
+    sendScoreboard(observer, randomTeamName(), profile(), hasAttribute(attributes, INVISIBLE));
+  }
+
+  private static String randomTeamName() {
+    return RandomStringGenerator.randomString();
   }
 
   public void latencyInitialize() {
-    PacketContainer packet = create(PacketType.Play.Server.PLAYER_INFO);
-    WrappedChatComponent wrappedChatComponent = WrappedChatComponent.fromText(prefix);
-    PlayerInfoData playerInfoData = new PlayerInfoData(
-      profile(),
-      0,
-      EnumWrappers.NativeGameMode.SURVIVAL,
-      wrappedChatComponent
-    );
-    List<PlayerInfoData> playerInformationList = packet.getPlayerInfoDataLists().readSafely(0);
-    playerInformationList.add(playerInfoData);
-    packet.getPlayerInfoAction().writeSafely(0, EnumWrappers.PlayerInfoAction.UPDATE_LATENCY);
-    packet.getPlayerInfoDataLists().writeSafely(0, playerInformationList);
-    packet.getBooleans().writeSafely(0, true);
+    int latency = 0;
+    PacketWrapper<?> packet;
+    if (MODERN_PLAYER_INFO) {
+      WrapperPlayServerPlayerInfoUpdate.PlayerInfo info = new WrapperPlayServerPlayerInfoUpdate.PlayerInfo(
+        profile(), true, latency, GameMode.SURVIVAL, Component.text(prefix), null
+      );
+      packet = new WrapperPlayServerPlayerInfoUpdate(
+        EnumSet.of(WrapperPlayServerPlayerInfoUpdate.Action.UPDATE_LATENCY),
+        info
+      );
+    } else {
+      WrapperPlayServerPlayerInfo.PlayerData playerData = new WrapperPlayServerPlayerInfo.PlayerData(
+        Component.text(prefix), profile(), GameMode.SURVIVAL, latency
+      );
+      packet = new WrapperPlayServerPlayerInfo(
+        WrapperPlayServerPlayerInfo.Action.UPDATE_LATENCY, playerData
+      );
+    }
     send(packet);
   }
 
-  private PacketContainer create(PacketType packetType) {
-    return ProtocolLibrary.getProtocolManager().createPacket(packetType);
-  }
-
-  private void send(PacketContainer packet) {
+  private void send(PacketWrapper<?> packet) {
     if (threadEscape(() -> send(packet))) {
       return;
     }

@@ -1,6 +1,6 @@
 package de.jpx3.intave.module.patcher;
 
-import com.comphenix.protocol.events.PacketEvent;
+import com.github.retrooper.packetevents.event.ProtocolPacketEvent;
 import com.google.common.collect.Sets;
 import de.jpx3.intave.IntaveLogger;
 import de.jpx3.intave.IntavePlugin;
@@ -45,18 +45,13 @@ public final class ChunkAccessPatcher extends Module {
   @PacketSubscription(
     packetsOut = PacketId.Server.RESPAWN
   )
-  public void patchRespawnWorldType(PacketEvent event) {
+  public void patchRespawnWorldType(ProtocolPacketEvent event) {
 //    Bukkit.createWorld()
     if (!MinecraftVersions.VER1_16_0.atOrAbove()) {
-      WorldType worldType = event.getPacket().getWorldTypeModifier().readSafely(0);
-      if (worldType == null) {
-        event.getPacket().getWorldTypeModifier().writeSafely(0, WorldType.NORMAL);
-//        System.out.println("Patched world type to normal");
-        System.err.println("Intave: Sent world type is null!!");
-        Thread.dumpStack();
-        return;
-      }
-//      System.out.println("Worldtype: "+worldType);
+      // TODO(pe-migration): ProtocolLib exposed a Bukkit WorldType modifier on the RESPAWN packet to
+      // null-guard the legacy (<1.16) "level type" string. PacketEvents' WrapperPlayServerRespawn does
+      // not surface a Bukkit WorldType field and re-encodes the level-type itself, so this defensive
+      // null-patch has no direct equivalent. Re-evaluate if a null level-type regression surfaces on 1.8-1.15.
     }
   }
 

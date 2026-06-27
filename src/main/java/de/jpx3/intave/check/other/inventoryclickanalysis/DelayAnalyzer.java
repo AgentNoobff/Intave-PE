@@ -1,13 +1,13 @@
 package de.jpx3.intave.check.other.inventoryclickanalysis;
 
-import com.comphenix.protocol.events.PacketEvent;
+import com.github.retrooper.packetevents.event.ProtocolPacketEvent;
 import de.jpx3.intave.IntavePlugin;
 import de.jpx3.intave.adapter.MinecraftVersions;
 import de.jpx3.intave.adapter.ProtocolLibraryAdapter;
 import de.jpx3.intave.check.MetaCheckPart;
 import de.jpx3.intave.check.other.InventoryClickAnalysis;
-import de.jpx3.intave.klass.Lookup;
 import de.jpx3.intave.math.MathHelper;
+import de.jpx3.intave.packet.reader.WindowClickReader;
 import de.jpx3.intave.module.Modules;
 import de.jpx3.intave.module.linker.packet.ListenerPriority;
 import de.jpx3.intave.module.linker.packet.PacketSubscription;
@@ -26,17 +26,13 @@ import java.util.List;
 import static de.jpx3.intave.module.linker.packet.PacketId.Client.WINDOW_CLICK;
 
 public final class DelayAnalyzer extends MetaCheckPart<InventoryClickAnalysis, DelayAnalyzer.ClickDelayMeta> {
-  private static final boolean MODERN_WINDOW_CLICK = ProtocolLibraryAdapter.serverVersion().isAtLeast(MinecraftVersions.VER1_9_0);
-
   private final IntavePlugin plugin;
   private final boolean highToleranceMode;
-  private final Class<?> clickType;
 
   public DelayAnalyzer(InventoryClickAnalysis parentCheck, boolean highToleranceMode) {
     super(parentCheck, ClickDelayMeta.class);
     this.highToleranceMode = highToleranceMode;
     this.plugin = IntavePlugin.singletonInstance();
-    this.clickType = MODERN_WINDOW_CLICK ? Lookup.serverClass("InventoryClickType") : null;
   }
 
   @PacketSubscription(
@@ -45,7 +41,7 @@ public final class DelayAnalyzer extends MetaCheckPart<InventoryClickAnalysis, D
       WINDOW_CLICK
     }
   )
-  public void windowClickPacket(PacketEvent event) {
+  public void windowClickPacket(ProtocolPacketEvent event, WindowClickReader reader) {
     Player player = event.getPlayer();
     if (player.getGameMode().equals(GameMode.CREATIVE)) {
       return;
@@ -61,16 +57,10 @@ public final class DelayAnalyzer extends MetaCheckPart<InventoryClickAnalysis, D
       return;
     }
 
-    int slot = event.getPacket().getIntegers().read(1);
-    ItemStack itemStack = event.getPacket().getItemModifier().read(0);
+    int slot = reader.slot();
+    ItemStack itemStack = reader.itemStack();
     Material clickedItemID = itemStack == null ? Material.AIR : itemStack.getType();
-    boolean droppedAnItem;
-    if (MODERN_WINDOW_CLICK) {
-      InventoryClickTypes clickTypes = event.getPacket().getEnumModifier(InventoryClickTypes.class, clickType).read(0);
-      droppedAnItem = clickTypes == InventoryClickTypes.THROW && slot != -999;
-    } else {
-      droppedAnItem = event.getPacket().getIntegers().read(3) == 4 && slot != -999;
-    }
+    boolean droppedAnItem = reader.isDrop();
 
     if (slot != -999 && meta.lastClickedSlot != -999) {
       if ((clickedItemID != meta.lastClickedMaterial || droppedAnItem) && meta.lastClickedTimeStamp != 0) {
@@ -172,15 +162,5 @@ public final class DelayAnalyzer extends MetaCheckPart<InventoryClickAnalysis, D
     private long lastClickedTimeStamp;
     private Material lastClickedMaterial;
     private long lastFlagTimeStamp;
-  }
-
-  public enum InventoryClickTypes {
-    PICKUP,
-    QUICK_MOVE,
-    SWAP,
-    CLONE,
-    THROW,
-    QUICK_CRAFT,
-    PICKUP_ALL
   }
 }

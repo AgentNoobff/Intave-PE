@@ -1,14 +1,17 @@
 package de.jpx3.intave.player.fake;
 
-import com.comphenix.protocol.wrappers.WrappedDataWatcher;
-import com.comphenix.protocol.wrappers.WrappedGameProfile;
+import com.github.retrooper.packetevents.protocol.entity.data.EntityData;
+import com.github.retrooper.packetevents.protocol.player.UserProfile;
+
+import java.util.ArrayList;
+import java.util.List;
 
 public abstract class FakePlayerIdentity {
   private final int identifier;
-  private final WrappedGameProfile profile;
-  private final WrappedDataWatcher dataWatcher = new WrappedDataWatcher();
+  private final UserProfile profile;
+  private final List<EntityData<?>> dataWatcher = new ArrayList<>();
 
-  protected FakePlayerIdentity(int identifier, WrappedGameProfile profile) {
+  protected FakePlayerIdentity(int identifier, UserProfile profile) {
     this.identifier = identifier;
     this.profile = profile;
   }
@@ -17,11 +20,11 @@ public abstract class FakePlayerIdentity {
     return identifier;
   }
 
-  public WrappedGameProfile profile() {
+  public UserProfile profile() {
     return profile;
   }
 
-  public WrappedDataWatcher dataWatcher() {
+  public List<EntityData<?>> dataWatcher() {
     return dataWatcher;
   }
 }

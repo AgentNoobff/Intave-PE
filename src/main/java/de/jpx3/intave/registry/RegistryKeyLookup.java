@@ -1,6 +1,5 @@
 package de.jpx3.intave.registry;
 
-import com.comphenix.protocol.wrappers.MinecraftKey;
 import de.jpx3.intave.adapter.MinecraftVersions;
 import de.jpx3.intave.klass.Lookup;
 import de.jpx3.intave.klass.locate.MethodSearchBySignature;
@@ -87,12 +86,34 @@ public class RegistryKeyLookup {
     iRegistryWritableClass = iRegistryWritable;
   }
 
+  // Builds a native MinecraftKey/ResourceLocation from a namespaced string. ProtocolLib's converter
+  // handled the per-version differences; we do it via reflection now (legacy public ctor, then the
+  // static factories used on 1.21+ where the constructor became non-public).
   private static Object minecraftKeyFrom(String fullKey) {
-    return MinecraftKey.getConverter().getGeneric(new MinecraftKey(fullKey));
+    Class<?> keyClass = Lookup.serverClass("MinecraftKey");
+    try {
+      try {
+        return keyClass.getConstructor(String.class).newInstance(fullKey);
+      } catch (NoSuchMethodException noPublicCtor) {
+        for (String factory : new String[]{"a", "parse", "tryParse", "withDefaultNamespace"}) {
+          try {
+            java.lang.reflect.Method method = keyClass.getMethod(factory, String.class);
+            if (java.lang.reflect.Modifier.isStatic(method.getModifiers())) {
+              return method.invoke(null, fullKey);
+            }
+          } catch (NoSuchMethodException ignored) {
+          }
+        }
+        throw new IllegalStateException("No MinecraftKey factory found on " + keyClass);
+      }
+    } catch (Exception exception) {
+      throw new RuntimeException(exception);
+    }
   }
 
   private static String stringFromMinecraftKey(Object key) {
-    return MinecraftKey.fromHandle(key).getFullKey();
+    // Native MinecraftKey#toString() yields the "namespace:path" form.
+    return key == null ? null : key.toString();
   }
 
   private static Object registryRegistry;

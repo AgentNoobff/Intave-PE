@@ -1,9 +1,7 @@
 package de.jpx3.intave.module.filter;
 
-import com.comphenix.protocol.PacketType;
-import com.comphenix.protocol.events.PacketContainer;
-import com.comphenix.protocol.events.PacketEvent;
-import com.comphenix.protocol.reflect.StructureModifier;
+import com.github.retrooper.packetevents.event.ProtocolPacketEvent;
+import com.github.retrooper.packetevents.protocol.packettype.PacketType;
 import de.jpx3.intave.IntavePlugin;
 import de.jpx3.intave.cleanup.ShutdownTasks;
 import de.jpx3.intave.module.linker.packet.ListenerPriority;
@@ -73,14 +71,16 @@ public final class EntityIdFilter extends Filter {
     priority = ListenerPriority.LOWEST
   )
   public void onPacket(
-    PacketEvent event
+    ProtocolPacketEvent event
   ) {
-    User user = UserRepository.userOf(event.getPlayer());
-    PacketContainer packet = event.getPacket();
-    StructureModifier<Integer> ints = packet.getIntegers();
-    int localId = ints.read(0);
-    int globalId = user.meta().connection().globalEntityIdFromLocal(localId);
-    ints.write(0, globalId);
+    User user = UserRepository.userOf((org.bukkit.entity.Player) event.getPlayer());
+    EntityIterable entities = PacketReaders.readerOf(event);
+    for (SubstitutionIterator<Integer> iterator = entities.iterator(); iterator.hasNext(); ) {
+      int localId = iterator.next();
+      int globalId = user.meta().connection().globalEntityIdFromLocal(localId);
+      iterator.set(globalId);
+    }
+    entities.release();
   }
 
   @PacketSubscription(
@@ -124,13 +124,12 @@ public final class EntityIdFilter extends Filter {
     priority = ListenerPriority.HIGHEST
   )
   public void onPacketOut(
-    PacketEvent event
+    ProtocolPacketEvent event
   ) {
-    PacketContainer packet = event.getPacket();
-    User user = UserRepository.userOf(event.getPlayer());
+    User user = UserRepository.userOf((org.bukkit.entity.Player) event.getPlayer());
     ConnectionMetadata connection = user.meta().connection();
-    EntityIterable entities = PacketReaders.readerOf(packet);
-    boolean isDestroy = packet.getType() == PacketType.Play.Server.ENTITY_DESTROY;
+    EntityIterable entities = PacketReaders.readerOf(event);
+    boolean isDestroy = event.getPacketType() == PacketType.Play.Server.DESTROY_ENTITIES;
     for (SubstitutionIterator<Integer> iterator = entities.iterator(); iterator.hasNext(); ) {
       Integer globalId = iterator.next();
       Integer localId = connection.localEntityIdFromGlobal(globalId);

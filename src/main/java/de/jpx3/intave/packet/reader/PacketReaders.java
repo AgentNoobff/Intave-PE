@@ -1,11 +1,12 @@
 package de.jpx3.intave.packet.reader;
 
-import com.comphenix.protocol.PacketType;
-import com.comphenix.protocol.events.ConnectionSide;
-import com.comphenix.protocol.events.PacketContainer;
-import com.comphenix.protocol.injector.packet.PacketRegistry;
+import com.github.retrooper.packetevents.event.ProtocolPacketEvent;
+import com.github.retrooper.packetevents.protocol.packettype.PacketTypeCommon;
+import de.jpx3.intave.module.linker.packet.PacketId;
+import de.jpx3.intave.module.linker.packet.PacketTypeTranslator;
 
-import java.util.*;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.function.Supplier;
 
 import static de.jpx3.intave.module.linker.packet.PacketId.Client;
@@ -17,7 +18,7 @@ import static de.jpx3.intave.module.linker.packet.PacketId.Server.*;
 import static de.jpx3.intave.module.linker.packet.PacketId.Server.POSITION;
 
 public final class PacketReaders {
-  private static final Map<PacketType, ThreadLocal<? extends PacketReader>> readerLocals = new HashMap<>();
+  private static final Map<PacketTypeCommon, ThreadLocal<? extends PacketReader>> readerLocals = new HashMap<>();
 
   public static void setup() {
     setup(ABILITIES_OUT, AbilityOutReader::new);
@@ -91,65 +92,30 @@ public final class PacketReaders {
   }
 
   private static void setup(Server serverPacket, Supplier<? extends PacketReader> supplier) {
-    PacketType packetType = searchByName(selectPacketTypesFor(ConnectionSide.SERVER_SIDE), serverPacket.lookupName());
-    if (packetType != null) {
+    for (PacketTypeCommon packetType : PacketTypeTranslator.translate(serverPacket)) {
       readerLocals.put(packetType, ThreadLocal.withInitial(supplier));
     }
   }
 
   private static void setup(Client clientPacket, Supplier<? extends PacketReader> supplier) {
-    PacketType packetType = searchByName(selectPacketTypesFor(ConnectionSide.CLIENT_SIDE), clientPacket.lookupName());
-    if (packetType != null) {
+    for (PacketTypeCommon packetType : PacketTypeTranslator.translate(clientPacket)) {
       readerLocals.put(packetType, ThreadLocal.withInitial(supplier));
     }
   }
 
-  private static Collection<PacketType> selectPacketTypesFor(ConnectionSide connectionSide) {
-    Set<PacketType> availableTypes = new HashSet<>();
-    if (connectionSide.isForServer()) availableTypes.addAll(PacketRegistry.getServerPacketTypes());
-    if (connectionSide.isForClient()) availableTypes.addAll(PacketRegistry.getClientPacketTypes());
-    return availableTypes;
-  }
-
-  private static PacketType searchByName(Collection<? extends PacketType> packetPool, String name) {
-    Collection<PacketType> packetTypes = PacketType.fromName(name);
-    return packetTypes.stream().filter(packetPool::contains).findFirst().orElse(
-      packetPool.stream().filter(packetType -> matches(packetType, name)).findFirst().orElse(null)
-    );
-  }
-
-  private static boolean matches(PacketType packetType, String name) {
-    return packetType != null && packetType.name() != null && packetType.name().equalsIgnoreCase(name);
-  }
-
-  public static <T extends PacketReader> T readerOf(PacketContainer container) {
-    PacketType type = container.getType();
+  public static <T extends PacketReader> T readerOf(ProtocolPacketEvent event) {
+    PacketTypeCommon type = event.getPacketType();
     ThreadLocal<? extends PacketReader> readerThreadLocal = readerLocals.get(type);
     if (readerThreadLocal == null) {
-      // perform a name-based lookup, enter if found
-      for (Map.Entry<PacketType, ThreadLocal<? extends PacketReader>> entry : readerLocals.entrySet()) {
-        if (matches(entry.getKey(), type.name())) {
-          // must be the same protocol
-//          if (!type.getProtocol().equals(entry.getKey().getProtocol())) {
-//            continue;
-//          }
-          readerThreadLocal = entry.getValue();
-          readerLocals.put(type, readerThreadLocal);
-          break;
-        }
-      }
-
-      if (readerThreadLocal == null) {
-        throw new IllegalStateException("No reader available for type " + type.name());
-      }
+      throw new IllegalStateException("No reader available for type " + type.getName());
     }
     PacketReader interpreter = readerThreadLocal.get();
-    interpreter.enter(container);
+    interpreter.enter(event);
     //noinspection unchecked
     return (T) interpreter;
   }
 
-  public static boolean hasReader(PacketType type) {
+  public static boolean hasReader(PacketTypeCommon type) {
     return readerLocals.containsKey(type);
   }
 }

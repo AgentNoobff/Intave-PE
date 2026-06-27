@@ -41,7 +41,7 @@ public final class BlockPosition extends RawVector3d {
     this(source.getBlockX(), source.getBlockY(), source.getBlockZ());
   }
 
-  public BlockPosition(com.comphenix.protocol.wrappers.BlockPosition blockPosition) {
+  public BlockPosition(com.github.retrooper.packetevents.util.Vector3i blockPosition) {
     this(blockPosition.getX(), blockPosition.getY(), blockPosition.getZ());
   }
 

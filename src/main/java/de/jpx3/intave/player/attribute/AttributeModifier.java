@@ -1,7 +1,9 @@
 package de.jpx3.intave.player.attribute;
 
+import com.github.retrooper.packetevents.wrapper.play.server.WrapperPlayServerUpdateAttributes;
 import de.jpx3.intave.share.MinecraftKey;
 
+import java.util.List;
 import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
@@ -46,45 +48,28 @@ public final class AttributeModifier {
 	}
 
 	public static Set<AttributeModifier> fromProtocolLib(
-		Set<com.comphenix.protocol.wrappers.WrappedAttributeModifier> protocolLibModifiers
+		List<WrapperPlayServerUpdateAttributes.PropertyModifier> protocolLibModifiers
 	) {
 		return protocolLibModifiers.stream()
 			.map(AttributeModifier::fromProtocolLib)
 			.collect(Collectors.toSet());
 	}
 
-	private final static boolean KEY_EXISTS;
-
-	static {
-		boolean keyExists;
-		try {
-			keyExists = com.comphenix.protocol.wrappers.WrappedAttributeModifier.class.getDeclaredMethod("getKey") != null;
-		} catch (Throwable e) {
-			keyExists = false;
-		}
-		KEY_EXISTS = keyExists;
-	}
-
 	private static AttributeModifier fromProtocolLib(
-		com.comphenix.protocol.wrappers.WrappedAttributeModifier protocolLibModifier
+		WrapperPlayServerUpdateAttributes.PropertyModifier protocolLibModifier
 	) {
-		if (KEY_EXISTS) {
-			return new AttributeModifier(
-				MinecraftKey.fromProtocolLib(protocolLibModifier.getKey()),
-				protocolLibModifier.getUUID(),
-				protocolLibModifier.getName(),
-				Operation.fromId(protocolLibModifier.getOperation().getId()),
-				protocolLibModifier.getAmount()
-			);
-		} else {
-			return new AttributeModifier(
-				MinecraftKey.withDefaultNamespace(protocolLibModifier.getName()),
-				protocolLibModifier.getUUID(),
-				protocolLibModifier.getName(),
-				Operation.fromId(protocolLibModifier.getOperation().getId()),
-				protocolLibModifier.getAmount()
-			);
-		}
+		com.github.retrooper.packetevents.resources.ResourceLocation name = protocolLibModifier.getName();
+		MinecraftKey key = name != null
+			? MinecraftKey.fromProtocolLib(name)
+			: MinecraftKey.withDefaultNamespace("unknown");
+		String displayName = name != null ? name.getKey() : "unknown";
+		return new AttributeModifier(
+			key,
+			protocolLibModifier.getUUID(),
+			displayName,
+			Operation.fromId(protocolLibModifier.getOperation().ordinal()),
+			protocolLibModifier.getAmount()
+		);
 	}
 
 	@Override

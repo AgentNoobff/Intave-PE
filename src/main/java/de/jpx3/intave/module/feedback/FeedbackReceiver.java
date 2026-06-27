@@ -1,7 +1,16 @@
 package de.jpx3.intave.module.feedback;
 
-import com.comphenix.protocol.events.PacketContainer;
-import com.comphenix.protocol.events.PacketEvent;
+import com.github.retrooper.packetevents.event.PacketReceiveEvent;
+import com.github.retrooper.packetevents.event.PacketSendEvent;
+import com.github.retrooper.packetevents.event.ProtocolPacketEvent;
+import com.github.retrooper.packetevents.protocol.packettype.PacketType;
+import com.github.retrooper.packetevents.protocol.packettype.PacketTypeCommon;
+import com.github.retrooper.packetevents.wrapper.play.client.WrapperPlayClientClickWindow;
+import com.github.retrooper.packetevents.wrapper.play.client.WrapperPlayClientKeepAlive;
+import com.github.retrooper.packetevents.wrapper.play.client.WrapperPlayClientPong;
+import com.github.retrooper.packetevents.wrapper.play.client.WrapperPlayClientWindowConfirmation;
+import com.github.retrooper.packetevents.wrapper.play.server.WrapperPlayServerPing;
+import com.github.retrooper.packetevents.wrapper.play.server.WrapperPlayServerWindowConfirmation;
 import de.jpx3.intave.IntaveControl;
 import de.jpx3.intave.IntaveLogger;
 import de.jpx3.intave.IntavePlugin;
@@ -96,14 +105,10 @@ public final class FeedbackReceiver extends Module {
   @PacketSubscription(
     packetsIn = WINDOW_CLICK
   )
-  public void receiveInventoryClick(PacketEvent event) {
+  public void receiveInventoryClick(ProtocolPacketEvent event) {
     Player player = event.getPlayer();
     User user = userOf(player);
-    PacketContainer packet = event.getPacket();
-    Short clientTransactionId = packet.getShorts().readSafely(0);
-    if (clientTransactionId == null) {
-      return;
-    }
+    new WrapperPlayClientClickWindow((PacketReceiveEvent) event).getActionNumber();
 //    ConnectionMetadata connection = user.meta().connection();
 //    connection.windowClickId++;
 //    connection.windowClickId %= 250;
@@ -116,20 +121,15 @@ public final class FeedbackReceiver extends Module {
       KEEP_ALIVE
     }
   )
-  public void onKeepAlive(PacketEvent event) {
+  public void onKeepAlive(ProtocolPacketEvent event) {
     if (!IntaveControl.CLIENT_KEEP_ALIVE_NETTY_CHECK) {
       return;
     }
     Player player = event.getPlayer();
     User user = userOf(player);
     FeedbackQueue feedbackQueue = user.meta().connection().feedbackQueue();
-    PacketContainer packet = event.getPacket();
-    short possibleUserKey = 0;
-    if (MinecraftVersions.VER1_12_0.atOrAbove()) {
-      possibleUserKey = packet.getLongs().readSafely(0).shortValue();
-    } else {
-      possibleUserKey = packet.getIntegers().readSafely(0).shortValue();
-    }
+    // PacketEvents normalises the keep-alive id to a long across all versions.
+    short possibleUserKey = (short) new WrapperPlayClientKeepAlive((PacketReceiveEvent) event).getId();
     FeedbackRequest<?> peek = feedbackQueue.peek(possibleUserKey);
     if (peek != null) {
       peek.verifyPreThreadInjection();
@@ -142,13 +142,13 @@ public final class FeedbackReceiver extends Module {
       PacketId.Server.TRANSACTION, PacketId.Server.PING
     }
   )
-  public void outgoingTransaction(PacketEvent event) {
+  public void outgoingTransaction(ProtocolPacketEvent event) {
     Player player = event.getPlayer();
-    PacketContainer packet = event.getPacket();
     User user = UserRepository.userOf(player);
     boolean noPingMask = user.meta().protocol().noPingMask();
-    if (!hasValidUserKey(packet, noPingMask) && activeGenerator != IdGeneratorMode.highestCompatibility()) {
-      short userKey = userKeyFrom(packet, noPingMask);
+    int rawId = outgoingRawId(event);
+    if (!hasValidUserKey(rawId, noPingMask) && activeGenerator != IdGeneratorMode.highestCompatibility()) {
+      short userKey = userKeyFrom(rawId, noPingMask);
       boolean couldBeWindowClick = userKey >= Short.MAX_VALUE - 250;
       if (couldBeWindowClick) {
         return;
@@ -165,7 +165,7 @@ public final class FeedbackReceiver extends Module {
       TRANSACTION, PONG
     }
   )
-  public void receiveAcknowledgementPacket(PacketEvent event) {
+  public void receiveAcknowledgementPacket(ProtocolPacketEvent event) {
     Player player = event.getPlayer();
 
     // viaversion packet limit workaround
@@ -178,21 +178,21 @@ public final class FeedbackReceiver extends Module {
     MetadataBundle meta = user.meta();
     ConnectionMetadata connection = meta.connection();
     FeedbackQueue feedbackQueue = connection.feedbackQueue();
-    PacketContainer packet = event.getPacket();
     boolean noPingMask = user.meta().protocol().noPingMask();
+    int rawId = incomingRawId(event);
 
-    if (!hasValidUserKey(packet, noPingMask)) {
+    if (!hasValidUserKey(rawId, noPingMask)) {
       if (IntaveControl.DEBUG_FEEDBACK_PACKETS) {
-        System.out.println("Received " + packet.getIntegers().readSafely(0) + " from " + player.getName() + " but no user key was found");
+        System.out.println("Received " + rawId + " from " + player.getName() + " but no user key was found");
       }
       return;
     }
 
-    short userKey = userKeyFrom(packet, noPingMask);
+    short userKey = userKeyFrom(rawId, noPingMask);
     FeedbackRequest<?> response = feedbackQueue.peek(userKey);
     if (response == null) {
       if (IntaveControl.DEBUG_FEEDBACK_PACKETS) {
-        System.out.println("Received " + userKey + "/" + packet.getIntegers().readSafely(0) + " from " + player.getName() + " but no request was found");
+        System.out.println("Received " + userKey + "/" + rawId + " from " + player.getName() + " but no request was found");
       }
       return;
     }
@@ -264,25 +264,45 @@ public final class FeedbackReceiver extends Module {
     event.setCancelled(true);
   }
 
-  private short userKeyFrom(PacketContainer packet, boolean noPingMask) {
+  // Extracts the raw wire id from an inbound acknowledgement (PONG on 1.17+, window confirmation
+  // action id on legacy). The helpers below interpret it identically to the old StructureModifier reads.
+  private int incomingRawId(ProtocolPacketEvent event) {
+    PacketTypeCommon type = event.getPacketType();
+    PacketReceiveEvent receive = (PacketReceiveEvent) event;
+    if (type == PacketType.Play.Client.PONG) {
+      return new WrapperPlayClientPong(receive).getId();
+    }
+    return new WrapperPlayClientWindowConfirmation(receive).getActionId();
+  }
+
+  // Extracts the raw wire id from an outbound feedback packet (PING on 1.17+, window confirmation
+  // action id on legacy).
+  private int outgoingRawId(ProtocolPacketEvent event) {
+    PacketTypeCommon type = event.getPacketType();
+    PacketSendEvent send = (PacketSendEvent) event;
+    if (type == PacketType.Play.Server.PING) {
+      return new WrapperPlayServerPing(send).getId();
+    }
+    return new WrapperPlayServerWindowConfirmation(send).getActionId();
+  }
+
+  private short userKeyFrom(int rawValue, boolean noPingMask) {
     if (USE_PING_PACKETS) {
-      int inputInteger = packet.getIntegers().readSafely(0);
-      return (short) (inputInteger & 0xffff);
+      return (short) (rawValue & 0xffff);
     } else {
-      return packet.getShorts().readSafely(0);
+      return (short) rawValue;
     }
   }
 
-  private boolean hasValidUserKey(PacketContainer packet, boolean noPingMask) {
+  private boolean hasValidUserKey(int rawValue, boolean noPingMask) {
     short shortInput;
     if (USE_PING_PACKETS) {
-      int inputInteger = packet.getIntegers().readSafely(0);
-      if ((inputInteger & 0xffff0000) != PING_MASK && !noPingMask) {
+      if ((rawValue & 0xffff0000) != PING_MASK && !noPingMask) {
         return false;
       }
-      shortInput = (short) (inputInteger & 0xffff);
+      shortInput = (short) (rawValue & 0xffff);
     } else {
-      shortInput = packet.getShorts().readSafely(0);
+      shortInput = (short) rawValue;
     }
     return shortInput <= MAX_USER_KEY && shortInput >= MIN_USER_KEY;
   }
@@ -324,7 +344,7 @@ public final class FeedbackReceiver extends Module {
       ATTACK_ENTITY, USE_ENTITY
     }
   )
-  public void cancelAttacksIfTransactionMissing(PacketEvent event) {
+  public void cancelAttacksIfTransactionMissing(ProtocolPacketEvent event) {
     Player player = event.getPlayer();
     User user = UserRepository.userOf(player);
     ConnectionMetadata connection = user.meta().connection();
@@ -346,7 +366,7 @@ public final class FeedbackReceiver extends Module {
       BLOCK_DIG, BLOCK_PLACE, USE_ITEM
     }
   )
-  public void cancelInteractionsOnTimeout(PacketEvent event) {
+  public void cancelInteractionsOnTimeout(ProtocolPacketEvent event) {
     Player player = event.getPlayer();
     User user = UserRepository.userOf(player);
     user.meta().connection().eligibleForTransactionTimeout = true;

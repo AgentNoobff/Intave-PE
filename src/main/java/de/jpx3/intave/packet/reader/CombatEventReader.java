@@ -2,41 +2,34 @@ package de.jpx3.intave.packet.reader;
 
 import org.jetbrains.annotations.NotNull;
 
-public final class CombatEventReader extends AbstractPacketReader implements EntityIterable{
+public final class CombatEventReader extends AbstractPacketReader implements EntityIterable {
+  // TODO(pe-migration): the legacy single COMBAT_EVENT packet was split by PacketEvents into
+  // END/ENTER/DEATH combat-event wrappers. The entity ids were only consumed by the disabled
+  // entity-decoy remapping, so this reader no longer extracts them.
   public int firstEntityId() {
-    return packet().getIntegers().read(0);
+    return -1;
   }
 
   public int secondEntityId() {
-    return packet().getIntegers().read(1);
+    return -1;
   }
-
-  private int slot = 0;
 
   @Override
   public @NotNull SubstitutionIterator<Integer> iterator() {
-    slot = 0;
-    return STATIC_ITERATOR;
-  }
-
-  private final SubstitutionIterator<Integer> STATIC_ITERATOR = new SubstitutionIterator<Integer>() {
-    @Override
-    public void set(Integer integer) {
-      if (slot == 1) {
-        packet().getIntegers().write(0, integer);
-      } else if (slot == 2) {
-        packet().getIntegers().write(1, integer);
+    return new SubstitutionIterator<Integer>() {
+      @Override
+      public void set(Integer integer) {
       }
-    }
 
-    @Override
-    public boolean hasNext() {
-      return slot < 2;
-    }
+      @Override
+      public boolean hasNext() {
+        return false;
+      }
 
-    @Override
-    public Integer next() {
-      return packet().getIntegers().read(slot++);
-    }
-  };
+      @Override
+      public Integer next() {
+        throw new UnsupportedOperationException();
+      }
+    };
+  }
 }

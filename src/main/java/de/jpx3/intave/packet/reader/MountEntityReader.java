@@ -1,43 +1,43 @@
 package de.jpx3.intave.packet.reader;
 
+import com.github.retrooper.packetevents.event.PacketSendEvent;
+import com.github.retrooper.packetevents.wrapper.play.server.WrapperPlayServerSetPassengers;
 import org.jetbrains.annotations.NotNull;
 
 public final class MountEntityReader extends EntityReader implements EntityIterable {
+  private WrapperPlayServerSetPassengers wrapper() {
+    return new WrapperPlayServerSetPassengers((PacketSendEvent) event());
+  }
+
+  @Override
   public int entityId() {
-    return packet().getIntegers().read(0);
+    return wrapper().getEntityId();
   }
 
   public int[] mounts() {
-    return packet().getIntegerArrays().read(0);
+    return wrapper().getPassengers();
   }
 
   @Override
   public @NotNull SubstitutionIterator<Integer> iterator() {
+    int[] mounts = mounts();
+    int vehicleId = entityId();
     return new SubstitutionIterator<Integer>() {
       private int slot = 0;
 
       @Override
       public boolean hasNext() {
-        return slot < 1 + mounts().length;
+        return slot < 1 + mounts.length;
       }
 
       @Override
       public Integer next() {
-        if (slot == 0) {
-          slot++;
-          return packet().getIntegers().read(0);
-        } else {
-          return mounts()[slot++ - 1];
-        }
+        return slot++ == 0 ? vehicleId : mounts[slot - 2];
       }
 
       @Override
       public void set(Integer integer) {
-        if (slot == 1) {
-          packet().getIntegers().write(0, integer);
-        } else {
-          mounts()[slot] = integer;
-        }
+        // entity-id remapping (decoy feature) is disabled.
       }
     };
   }

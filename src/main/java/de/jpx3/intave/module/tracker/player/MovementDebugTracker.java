@@ -1,6 +1,9 @@
 package de.jpx3.intave.module.tracker.player;
 
-import com.comphenix.protocol.events.PacketContainer;
+import com.github.retrooper.packetevents.event.CancellableEvent;
+import com.github.retrooper.packetevents.event.PacketReceiveEvent;
+import com.github.retrooper.packetevents.event.ProtocolPacketEvent;
+import com.github.retrooper.packetevents.wrapper.play.client.WrapperPlayClientUpdateCommandBlockMinecart;
 import de.jpx3.intave.connect.sibyl.LabyModChannelHelper;
 import de.jpx3.intave.module.Module;
 import de.jpx3.intave.module.linker.packet.PacketSubscription;
@@ -14,7 +17,6 @@ import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import org.bukkit.Bukkit;
 import org.bukkit.entity.Player;
-import org.bukkit.event.Cancellable;
 import org.bukkit.plugin.messaging.Messenger;
 import org.bukkit.plugin.messaging.PluginMessageListener;
 
@@ -74,14 +76,14 @@ public final class MovementDebugTracker extends Module implements PluginMessageL
     packetsIn = {CUSTOM_PAYLOAD_IN}
   )
   public void onCustomPayloadIn(
-    User user, PacketContainer packet,
-    Cancellable cancellable
+    User user, ProtocolPacketEvent event,
+    CancellableEvent cancellable
   ) {
     if (!ENABLE_MOVEMENT_DEBUGGER_COLLECTOR) {
       return;
     }
     try(
-      PayloadInReader reader = PacketReaders.readerOf(packet);
+      PayloadInReader reader = PacketReaders.readerOf(event);
     ) {
       if (reader.tag().equalsIgnoreCase("MC|AdvCdm")) {
         ByteBuf bytes = reader.readBytes();
@@ -117,17 +119,19 @@ public final class MovementDebugTracker extends Module implements PluginMessageL
     debug = true
   )
   public void onTabCompleteIn(
-    User user, PacketContainer packet,
-    Cancellable cancellable
+    User user, ProtocolPacketEvent event,
+    CancellableEvent cancellable
   ) {
     if (!ENABLE_MOVEMENT_DEBUGGER_COLLECTOR) {
       return;
     }
-    Integer id = packet.getIntegers().readSafely(0);
-    if (id == null || id != -1) {
+    WrapperPlayClientUpdateCommandBlockMinecart packet =
+      new WrapperPlayClientUpdateCommandBlockMinecart((PacketReceiveEvent) event);
+    int id = packet.getEntityId();
+    if (id != -1) {
       return;
     }
-    String command = packet.getStrings().readSafely(0);
+    String command = packet.getCommand();
     if (command == null) {
       return;
     }
